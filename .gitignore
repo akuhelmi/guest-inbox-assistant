@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Local data and secrets
+*.db
+.env
+.env.*
+!.env.example
+
+# Tools
+.vercel/
+.DS_Store
