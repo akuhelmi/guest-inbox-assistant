@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-from app.config import Settings, normalize_db_url
+from app.config import Settings, load_settings, normalize_db_url
 from app.triage import FallbackTriager, TriageError, TriageInput, build_triager
 from app.triage.gemini import GeminiTriager, parse_response
 from app.triage.offline import OfflineTriager
@@ -99,3 +99,13 @@ def test_gemini_requires_a_key():
 )
 def test_normalize_db_url(url, expected):
     assert normalize_db_url(url) == expected
+
+
+def test_default_database_url(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("VERCEL", raising=False)
+    assert load_settings().database_url == "sqlite:///./guest_inbox.db"
+    monkeypatch.setenv("VERCEL", "1")
+    assert load_settings().database_url == "sqlite:////tmp/guest_inbox.db"
+    monkeypatch.setenv("DATABASE_URL", "postgres://u:p@h/db")
+    assert load_settings().database_url == "postgresql+psycopg://u:p@h/db"

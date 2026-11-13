@@ -84,7 +84,7 @@ All settings are environment variables with safe defaults (see `.env.example`):
 ## Tests and CI
 
 ```bash
-cd backend && ruff check . && pytest              # 53 tests
+cd backend && ruff check . && pytest              # 54 tests
 cd frontend && npm run lint && npm test && npm run build
 ```
 

@@ -20,6 +20,13 @@ def normalize_db_url(url: str) -> str:
     return url
 
 
+def default_db_url() -> str:
+    """Local SQLite file; on Vercel (read-only disk) /tmp, until DATABASE_URL is set."""
+    if os.environ.get("VERCEL"):
+        return "sqlite:////tmp/guest_inbox.db"
+    return "sqlite:///./guest_inbox.db"
+
+
 @dataclass(frozen=True)
 class Settings:
     database_url: str = "sqlite:///./guest_inbox.db"
@@ -34,7 +41,7 @@ class Settings:
 
 def load_settings() -> Settings:
     return Settings(
-        database_url=normalize_db_url(os.environ.get("DATABASE_URL", "sqlite:///./guest_inbox.db")),
+        database_url=normalize_db_url(os.environ.get("DATABASE_URL") or default_db_url()),
         llm_provider=os.environ.get("LLM_PROVIDER", "offline").strip().lower(),
         gemini_api_key=os.environ.get("GEMINI_API_KEY", ""),
         gemini_model=os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"),
