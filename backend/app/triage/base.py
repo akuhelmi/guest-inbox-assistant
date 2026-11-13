@@ -24,7 +24,7 @@ CATEGORY_LABELS: dict[str, str] = {
 class TriageInput:
     body: str
     guest_name: str = "there"
-    property_name: str = "your stay"
+    property_name: str = "our property"
 
 
 @dataclass(frozen=True)

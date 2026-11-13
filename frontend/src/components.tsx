@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { preview, timeAgo } from "./lib/inbox";
 import type { Message, Triage } from "./types";
 
@@ -44,10 +44,24 @@ export function MessageRow({
 
 /** Triage result with an editable draft. Nothing is ever sent from the demo.
  *  Give it a new `key` for each new result so the draft resets. */
-export function TriagePanel({ triage, title }: { triage: Triage; title: string }) {
+export function TriagePanel({
+  triage,
+  title,
+  fresh = false,
+}: {
+  triage: Triage;
+  title: string;
+  /** A new live result: scroll it into view and highlight it briefly. */
+  fresh?: boolean;
+}) {
+  const ref = useRef<HTMLElement>(null);
   const [draft, setDraft] = useState(triage.draft_reply);
   const [copied, setCopied] = useState(false);
   const draftId = `draft-${title.toLowerCase().replace(/\W+/g, "-")}`;
+
+  useEffect(() => {
+    if (fresh) ref.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [fresh]);
 
   async function copy() {
     try {
@@ -59,7 +73,7 @@ export function TriagePanel({ triage, title }: { triage: Triage; title: string }
   }
 
   return (
-    <section className="triage">
+    <section ref={ref} className={`triage${fresh ? " triage-fresh" : ""}`} aria-live="polite">
       <div className="triage-head">
         <h3>{title}</h3>
         <span className="muted small">by {triage.triaged_by}</span>

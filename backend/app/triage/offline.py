@@ -156,8 +156,8 @@ TEMPLATES: dict[str, str] = {
     ),
     "general_question": (
         "Hi {name}, thanks for your message! "
-        "Happy to help with that. Here is what I'd suggest for your stay at {prop}: "
-        "[add details]. Anything else, just ask."
+        "Happy to help with that. I'll check the details for your stay at {prop} "
+        "and get back to you shortly."
     ),
 }
 

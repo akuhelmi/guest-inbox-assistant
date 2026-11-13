@@ -143,7 +143,7 @@ function MessageDetail({ message, meta }: { message: Message; meta: Meta | null 
         )}
       </div>
       {error && <p className="error">{error}</p>}
-      {live && <TriagePanel key={runs} triage={live.triage} title="Live result" />}
+      {live && <TriagePanel key={runs} triage={live.triage} title="Live result" fresh />}
     </article>
   );
 }
@@ -208,7 +208,7 @@ function TryItBox({ meta }: { meta: Meta | null }) {
         </div>
       </form>
       {error && <p className="error">{error}</p>}
-      {result && <TriagePanel key={runs} triage={result.triage} title="Your message" />}
+      {result && <TriagePanel key={runs} triage={result.triage} title="Result for your message" fresh />}
     </section>
   );
 }

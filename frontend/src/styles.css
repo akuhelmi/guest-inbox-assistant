@@ -290,6 +290,21 @@ h3 {
   margin-top: 12px;
 }
 
+.triage-fresh {
+  animation: fresh 1.6s ease-out;
+}
+
+@keyframes fresh {
+  from {
+    background: var(--brand-soft);
+    border-color: var(--brand);
+  }
+  to {
+    background: var(--card);
+    border-color: var(--line);
+  }
+}
+
 .triage-head {
   display: flex;
   justify-content: space-between;
