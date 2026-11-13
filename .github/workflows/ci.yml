@@ -105,6 +105,14 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 20
+      # The Vercel CLI builds the Python function with uv (Python 3.12, as in the Dockerfile).
+      - if: steps.check.outputs.ready == 'true'
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - if: steps.check.outputs.ready == 'true'
+        name: Install uv
+        run: pipx install uv
       - if: steps.check.outputs.ready == 'true'
         run: npm install --global vercel@latest
       - if: steps.check.outputs.ready == 'true'
