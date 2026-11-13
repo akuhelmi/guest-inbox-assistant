@@ -76,7 +76,7 @@ All settings are environment variables with safe defaults (see `.env.example`):
 | `DATABASE_URL` | `sqlite:///./guest_inbox.db` | Any Postgres URL works, e.g. Supabase. |
 | `LLM_PROVIDER` | `offline` | `offline` or `gemini`. |
 | `GEMINI_API_KEY` | (empty) | Required for `gemini`; without it the offline rules are used. |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | Any Gemini model with JSON output. |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Any Gemini model with JSON output. |
 | `MAX_MESSAGE_CHARS` | `1000` | Length cap for pasted messages. |
 | `RATE_LIMIT_PER_HOUR` | `10` | Live runs per visitor per hour. |
 | `RATE_LIMIT_SALT` | `local-dev-salt` | Salt for the visitor hash; set your own in production. |
@@ -84,7 +84,7 @@ All settings are environment variables with safe defaults (see `.env.example`):
 ## Tests and CI
 
 ```bash
-cd backend && ruff check . && pytest              # 54 tests
+cd backend && ruff check . && pytest              # 56 tests
 cd frontend && npm run lint && npm test && npm run build
 ```
 

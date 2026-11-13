@@ -32,7 +32,7 @@ class Settings:
     database_url: str = "sqlite:///./guest_inbox.db"
     llm_provider: str = "offline"
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.5-flash-lite"
     llm_timeout_seconds: int = 8
     max_message_chars: int = 1000
     rate_limit_per_hour: int = 10
@@ -44,7 +44,7 @@ def load_settings() -> Settings:
         database_url=normalize_db_url(os.environ.get("DATABASE_URL") or default_db_url()),
         llm_provider=os.environ.get("LLM_PROVIDER", "offline").strip().lower(),
         gemini_api_key=os.environ.get("GEMINI_API_KEY", ""),
-        gemini_model=os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"),
+        gemini_model=os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite"),
         llm_timeout_seconds=_int("LLM_TIMEOUT_SECONDS", 8),
         max_message_chars=_int("MAX_MESSAGE_CHARS", 1000),
         rate_limit_per_hour=_int("RATE_LIMIT_PER_HOUR", 10),

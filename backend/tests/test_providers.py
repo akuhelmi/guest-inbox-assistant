@@ -68,6 +68,16 @@ def test_gemini_http_error_raises():
         GeminiTriager("k", "m", client=client).triage(TriageInput("hi"))
 
 
+def test_gemini_http_error_includes_googles_message():
+    client, _ = mock_client(404, {"error": {"message": "models/m is not found"}})
+    with pytest.raises(TriageError, match=r"HTTP 404: models/m is not found"):
+        GeminiTriager("k", "m", client=client).triage(TriageInput("hi"))
+
+
+def test_default_model_is_current():
+    assert Settings().gemini_model == "gemini-3.5-flash-lite"
+
+
 def test_fallback_uses_offline_rules_when_provider_fails():
     client, _ = mock_client(503)
     triager = FallbackTriager(GeminiTriager("k", "m", client=client))

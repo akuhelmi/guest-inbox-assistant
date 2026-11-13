@@ -38,6 +38,15 @@ RESPONSE_SCHEMA = {
 }
 
 
+def _error_detail(resp: httpx.Response) -> str:
+    """Google's own error message (e.g. model not found), shortened; never contains the key."""
+    try:
+        message = resp.json()["error"]["message"]
+    except (ValueError, KeyError, TypeError):
+        return "no error message"
+    return str(message)[:200]
+
+
 def parse_response(payload: dict) -> dict:
     """Pull the JSON object out of a generateContent response and validate it."""
     try:
@@ -104,7 +113,7 @@ class GeminiTriager:
             if self._client is None:
                 client.close()
         if resp.status_code != 200:
-            raise TriageError(f"Gemini returned HTTP {resp.status_code}")
+            raise TriageError(f"Gemini returned HTTP {resp.status_code}: {_error_detail(resp)}")
         data = parse_response(resp.json())
         return TriageResult(
             category=data["category"],
