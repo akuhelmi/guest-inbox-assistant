@@ -5,7 +5,7 @@ import pytest
 
 from app.config import Settings, load_settings, normalize_db_url
 from app.triage import FallbackTriager, TriageError, TriageInput, build_triager
-from app.triage.gemini import GeminiTriager, parse_response
+from app.triage.gemini import PROMPT, GeminiTriager, parse_response
 from app.triage.offline import OfflineTriager
 
 
@@ -72,6 +72,10 @@ def test_gemini_http_error_includes_googles_message():
     client, _ = mock_client(404, {"error": {"message": "models/m is not found"}})
     with pytest.raises(TriageError, match=r"HTTP 404: models/m is not found"):
         GeminiTriager("k", "m", client=client).triage(TriageInput("hi"))
+
+
+def test_prompt_forbids_a_made_up_signature():
+    assert "Do not sign off with a name" in PROMPT
 
 
 def test_default_model_is_current():

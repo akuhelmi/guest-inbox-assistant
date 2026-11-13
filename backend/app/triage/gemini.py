@@ -20,6 +20,7 @@ safety risk (smoke, gas, flooding, injury), or stranded at arrival.
 Write "reason" as one short sentence.
 Write "draft_reply" as the operator: warm, short (2-4 sentences), concrete next step,
 first name only, no promises of refunds or compensation. Never invent door codes or addresses.
+Do not sign off with a name or signature: the operator adds their own.
 
 Guest name: {guest}
 Property: {prop}
