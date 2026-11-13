@@ -6,7 +6,7 @@ never sends anything itself.
 
 > **Demo only.** Every property, guest and message is invented. Do not paste real guest data.
 
-**Live demo:** _link added after the first deploy_
+**Live demo:** https://guest-inbox-assistant.vercel.app
 
 ## What it does
 
@@ -90,7 +90,8 @@ cd frontend && npm run lint && npm test && npm run build
 
 GitHub Actions runs on every push: backend tests against a real Postgres, frontend lint,
 typecheck, tests and build, and a Docker build with a smoke test. A green run on `main` deploys
-to Vercel (static frontend + FastAPI as a Python function).
+to Vercel (static frontend + FastAPI as a Python function), with Supabase Postgres as the live
+database.
 
 ## API
 
