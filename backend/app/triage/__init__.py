@@ -3,6 +3,7 @@
 import logging
 from dataclasses import replace
 
+from ..claude_cli import available
 from ..config import Settings
 from .base import (
     CATEGORIES,
@@ -16,6 +17,7 @@ from .base import (
     TriageResult,
     language_label,
 )
+from .claude import ClaudeTriager
 from .gemini import GeminiTriager
 from .offline import OfflineTriager
 
@@ -56,6 +58,20 @@ class FallbackTriager:
 
 def build_triager(settings: Settings) -> Triager:
     provider = settings.llm_provider
+    if provider == "claude":
+        if not available(settings.claude_bin):
+            log.warning(
+                "LLM_PROVIDER=claude but %r is not installed; using offline rules",
+                settings.claude_bin,
+            )
+            return OfflineTriager()
+        return FallbackTriager(
+            ClaudeTriager(
+                settings.claude_model,
+                timeout=settings.claude_timeout_seconds,
+                binary=settings.claude_bin,
+            )
+        )
     if provider == "gemini":
         if not settings.gemini_api_key:
             log.warning("LLM_PROVIDER=gemini but GEMINI_API_KEY is empty; using offline rules")

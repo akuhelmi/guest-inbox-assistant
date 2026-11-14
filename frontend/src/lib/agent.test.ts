@@ -9,9 +9,11 @@ import {
   assistantEntry,
   cardTitle,
   historyFor,
+  isAi,
   latestHighlight,
   loadChat,
   pendingIndexes,
+  providerLabel,
   saveChat,
   setCardState,
 } from "./agent";
@@ -192,5 +194,21 @@ describe("agentState", () => {
       statuses: { 1: { status: "replied", replied_at_ms: NOW } },
       tasks: [{ message_id: 2, title: "Plumber", done: false }],
     });
+  });
+});
+
+describe("provider labels", () => {
+  it("treats Gemini and local Claude as AI, fallbacks as quick commands", () => {
+    expect(isAi("gemini")).toBe(true);
+    expect(isAi("claude")).toBe(true);
+    expect(isAi("rules")).toBe(false);
+    expect(isAi("rules (fallback)")).toBe(false);
+    expect(isAi("offline")).toBe(false);
+  });
+
+  it("names each provider", () => {
+    expect(providerLabel("claude")).toBe("Claude (local)");
+    expect(providerLabel("gemini")).toBe("Google Gemini");
+    expect(providerLabel("offline")).toBe("Offline rules (no AI key)");
   });
 });

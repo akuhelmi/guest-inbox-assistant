@@ -3,6 +3,7 @@
 import logging
 from dataclasses import replace
 
+from ..claude_cli import available
 from ..config import Settings
 from .base import (
     CARD_KINDS,
@@ -16,6 +17,7 @@ from .base import (
     PropertyInfo,
     Turn,
 )
+from .claude import ClaudeAgent
 from .gemini import GeminiAgent
 from .rules import SUGGESTIONS, RulesAgent
 
@@ -56,6 +58,14 @@ class FallbackAgent:
 
 
 def build_agent(settings: Settings) -> Agent:
+    if settings.llm_provider == "claude" and available(settings.claude_bin):
+        return FallbackAgent(
+            ClaudeAgent(
+                settings.claude_model,
+                timeout=settings.claude_timeout_seconds,
+                binary=settings.claude_bin,
+            )
+        )
     if settings.llm_provider == "gemini" and settings.gemini_api_key:
         return FallbackAgent(
             GeminiAgent(

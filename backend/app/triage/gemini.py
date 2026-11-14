@@ -99,6 +99,13 @@ def parse_response(payload: dict) -> dict:
         data = json.loads(text)
     except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
         raise TriageError(f"unexpected Gemini response: {exc}") from exc
+    return validate_data(data)
+
+
+def validate_data(data: object) -> dict:
+    """Validate the model's JSON answer (any provider); soft fields get safe defaults."""
+    if not isinstance(data, dict):
+        raise TriageError("answer is not a JSON object")
     if data.get("category") not in CATEGORIES:
         raise TriageError(f"invalid category: {data.get('category')!r}")
     if not isinstance(data.get("urgent"), bool):
@@ -145,20 +152,7 @@ class GeminiTriager:
 
     def triage(self, item: TriageInput) -> TriageResult:
         body = {
-            "contents": [
-                {
-                    "parts": [
-                        {
-                            "text": PROMPT.format(
-                                guest=item.guest_name,
-                                prop=item.property_name,
-                                facts=format_facts(item.facts),
-                                body=item.body,
-                            )
-                        }
-                    ]
-                }
-            ],
+            "contents": [{"parts": [{"text": build_prompt(item)}]}],
             "generationConfig": {
                 "temperature": 0.3,
                 "responseMimeType": "application/json",
@@ -179,18 +173,31 @@ class GeminiTriager:
                 client.close()
         if resp.status_code != 200:
             raise TriageError(f"Gemini returned HTTP {resp.status_code}: {_error_detail(resp)}")
-        data = parse_response(resp.json())
-        return TriageResult(
-            category=data["category"],
-            urgent=data["urgent"],
-            reason=data["reason"].strip(),
-            draft_reply=data["draft_reply"].strip(),
-            triaged_by=self.name,
-            language=data["language"],
-            confidence=data["confidence"],
-            # Only facts that exist on this property's sheet count as used.
-            facts_used=tuple(dict.fromkeys(k for k in data["facts_used"] if k in item.facts)),
-            task_title=data["task_title"],
-            task_assignee=data["task_assignee"],
-            task_due_minutes=data["task_due_minutes"],
-        )
+        return to_result(parse_response(resp.json()), item, self.name)
+
+
+def build_prompt(item: TriageInput) -> str:
+    return PROMPT.format(
+        guest=item.guest_name,
+        prop=item.property_name,
+        facts=format_facts(item.facts),
+        body=item.body,
+    )
+
+
+def to_result(data: dict, item: TriageInput, by: str) -> TriageResult:
+    """A TriageResult from validated data."""
+    return TriageResult(
+        category=data["category"],
+        urgent=data["urgent"],
+        reason=data["reason"].strip(),
+        draft_reply=data["draft_reply"].strip(),
+        triaged_by=by,
+        language=data["language"],
+        confidence=data["confidence"],
+        # Only facts that exist on this property's sheet count as used.
+        facts_used=tuple(dict.fromkeys(k for k in data["facts_used"] if k in item.facts)),
+        task_title=data["task_title"],
+        task_assignee=data["task_assignee"],
+        task_due_minutes=data["task_due_minutes"],
+    )

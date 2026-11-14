@@ -9,8 +9,10 @@ import {
   assistantEntry,
   entryId,
   historyFor,
+  isAi,
   latestHighlight,
   loadChat,
+  providerLabel,
   saveChat,
   setCardState,
 } from "./lib/agent";
@@ -67,10 +69,6 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: "booking_change", label: "Booking change" },
   { key: "general_question", label: "General question" },
 ];
-
-function providerLabel(provider: string): string {
-  return provider === "gemini" ? "Google Gemini" : "Offline rules (no AI key)";
-}
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -213,7 +211,7 @@ export default function App() {
   }
 
   const aiLabel = meta
-    ? meta.provider === "gemini"
+    ? isAi(meta.provider)
       ? `AI replies left today: ${aiLeft ?? meta.agent_limit_per_day}`
       : "Quick commands (no AI key)"
     : "";

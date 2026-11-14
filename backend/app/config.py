@@ -39,6 +39,9 @@ class Settings:
     rate_limit_salt: str = "local-dev-salt"
     agent_limit_per_day: int = 30
     agent_timeout_seconds: int = 12
+    claude_model: str = "claude-sonnet-5-5"
+    claude_bin: str = "claude"
+    claude_timeout_seconds: int = 45
 
 
 def load_settings() -> Settings:
@@ -53,4 +56,7 @@ def load_settings() -> Settings:
         rate_limit_salt=os.environ.get("RATE_LIMIT_SALT", "local-dev-salt"),
         agent_limit_per_day=_int("AGENT_LIMIT_PER_DAY", 30),
         agent_timeout_seconds=_int("AGENT_TIMEOUT_SECONDS", 12),
+        claude_model=os.environ.get("CLAUDE_MODEL", "claude-sonnet-5-5"),
+        claude_bin=os.environ.get("CLAUDE_BIN", "claude"),
+        claude_timeout_seconds=_int("CLAUDE_TIMEOUT_SECONDS", 45),
     )

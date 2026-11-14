@@ -167,7 +167,14 @@ def parse_response(payload: dict, item: AgentInput, by: str = "gemini") -> Agent
         data = json.loads(text)
     except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
         raise AgentError(f"unexpected Gemini response: {exc}") from exc
-    reply = data.get("reply") if isinstance(data, dict) else None
+    return parse_data(data, item, by=by)
+
+
+def parse_data(data: object, item: AgentInput, by: str) -> AgentReply:
+    """Check the model's JSON answer (any provider) and keep only valid cards."""
+    if not isinstance(data, dict):
+        raise AgentError("answer is not a JSON object")
+    reply = data.get("reply")
     if not isinstance(reply, str) or not reply.strip():
         raise AgentError("missing reply")
     actions = data.get("actions") if isinstance(data.get("actions"), list) else []

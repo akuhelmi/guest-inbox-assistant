@@ -5,6 +5,7 @@ import {
   type ChatCard,
   type ChatEntry,
   cardTitle,
+  isAi,
   pendingIndexes,
 } from "./lib/agent";
 import type { Property, TaskSuggestion } from "./types";
@@ -254,7 +255,7 @@ function AssistantBubble({
         </div>
       )}
       <span className="bubble-by muted small">
-        {entry.by.startsWith("gemini") ? "AI" : "Quick commands"}
+        {isAi(entry.by) ? "AI" : "Quick commands"}
       </span>
     </div>
   );

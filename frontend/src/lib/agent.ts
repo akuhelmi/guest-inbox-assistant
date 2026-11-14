@@ -174,3 +174,17 @@ export function cardTitle(card: AgentCard): string {
   if (card.kind === "status") return `Mark ${card.guest_name} as ${card.status || "new"}`;
   return `Task for ${card.guest_name}`;
 }
+
+const AI_PROVIDERS: Record<string, string> = {
+  gemini: "Google Gemini",
+  claude: "Claude (local)",
+};
+
+/** True when a reply or provider name comes from a live AI, not the quick commands. */
+export function isAi(by: string): boolean {
+  return Object.keys(AI_PROVIDERS).some((p) => by === p || by.startsWith(`${p} `));
+}
+
+export function providerLabel(provider: string): string {
+  return AI_PROVIDERS[provider] ?? "Offline rules (no AI key)";
+}
