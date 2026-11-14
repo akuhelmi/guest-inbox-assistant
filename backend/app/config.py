@@ -37,6 +37,8 @@ class Settings:
     max_message_chars: int = 1000
     rate_limit_per_hour: int = 10
     rate_limit_salt: str = "local-dev-salt"
+    agent_limit_per_day: int = 30
+    agent_timeout_seconds: int = 12
 
 
 def load_settings() -> Settings:
@@ -49,4 +51,6 @@ def load_settings() -> Settings:
         max_message_chars=_int("MAX_MESSAGE_CHARS", 1000),
         rate_limit_per_hour=_int("RATE_LIMIT_PER_HOUR", 10),
         rate_limit_salt=os.environ.get("RATE_LIMIT_SALT", "local-dev-salt"),
+        agent_limit_per_day=_int("AGENT_LIMIT_PER_DAY", 30),
+        agent_timeout_seconds=_int("AGENT_TIMEOUT_SECONDS", 12),
     )

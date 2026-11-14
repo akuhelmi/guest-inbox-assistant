@@ -50,18 +50,21 @@ export function MessageRow({
   selected,
   onSelect,
   extra,
+  highlighted = false,
 }: {
   message: Message;
   selected: boolean;
   onSelect: () => void;
   /** Extra line under the meta row (status, reply time). */
   extra?: ReactNode;
+  /** The assistant is talking about this message. */
+  highlighted?: boolean;
 }) {
   return (
     <li>
       <button
         type="button"
-        className={`row${selected ? " row-selected" : ""}${message.triage.urgent ? " row-urgent" : ""}`}
+        className={`row${selected ? " row-selected" : ""}${message.triage.urgent ? " row-urgent" : ""}${highlighted ? " row-hl" : ""}`}
         onClick={onSelect}
         aria-current={selected}
       >

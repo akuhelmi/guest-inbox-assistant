@@ -72,6 +72,48 @@ export interface Meta {
   categories: Record<Category, string>;
   max_message_chars: number;
   rate_limit_per_hour: number;
+  agent_limit_per_day: number;
+  suggestions: string[];
 }
 
 export type Filter = "all" | "urgent" | "needs_host" | Category;
+
+// --- Inbox assistant --------------------------------------------------------------------
+
+export type CardKind = "draft" | "status" | "task";
+
+/** An action the assistant proposes. Nothing changes until the host approves it. */
+export interface AgentCard {
+  kind: CardKind;
+  message_id: number;
+  guest_name: string;
+  property_name: string;
+  draft: string;
+  language: string;
+  language_label: string;
+  confidence: Confidence;
+  needs_host: boolean;
+  facts_used: FactRef[];
+  status: Status | "";
+  task: TaskSuggestion | null;
+}
+
+export interface AgentReply {
+  text: string;
+  cards: AgentCard[];
+  highlight: number[];
+  focus: number | null;
+  by: string;
+  ai_left_today: number | null;
+  note: string | null;
+}
+
+export interface AgentTurn {
+  role: "host" | "assistant";
+  text: string;
+}
+
+export interface AgentStateIn {
+  statuses: Record<number, { status: Status; replied_at_ms: number | null }>;
+  tasks: { message_id: number; title: string; done: boolean }[];
+}

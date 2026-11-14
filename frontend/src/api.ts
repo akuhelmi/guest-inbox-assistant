@@ -1,4 +1,12 @@
-import type { LiveTriage, Message, Meta, Property } from "./types";
+import type {
+  AgentReply,
+  AgentStateIn,
+  AgentTurn,
+  LiveTriage,
+  Message,
+  Meta,
+  Property,
+} from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -28,5 +36,11 @@ export const api = {
     request<LiveTriage>("/api/triage", {
       method: "POST",
       body: JSON.stringify({ body, guest_name: guestName, property_id: propertyId }),
+    }),
+  /** One turn with the inbox assistant. An empty text asks for the opening briefing. */
+  agent: (text: string, history: AgentTurn[], state: AgentStateIn) =>
+    request<AgentReply>("/api/agent", {
+      method: "POST",
+      body: JSON.stringify({ text, history, state }),
     }),
 };

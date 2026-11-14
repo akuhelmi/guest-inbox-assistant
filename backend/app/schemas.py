@@ -1,6 +1,7 @@
 """API request and response shapes."""
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -74,3 +75,62 @@ class MetaOut(BaseModel):
     categories: dict[str, str]
     max_message_chars: int
     rate_limit_per_hour: int
+    agent_limit_per_day: int = 30
+    suggestions: list[str] = Field(default_factory=list)
+
+
+# --- Inbox assistant ---------------------------------------------------------------------
+
+
+class AgentTurn(BaseModel):
+    role: Literal["host", "assistant"]
+    text: str = Field(max_length=4000)
+
+
+class AgentStatus(BaseModel):
+    status: Literal["new", "replied", "done"]
+    replied_at_ms: int | None = None
+
+
+class AgentTask(BaseModel):
+    message_id: int
+    title: str = Field(max_length=200)
+    done: bool = False
+
+
+class AgentState(BaseModel):
+    """The visitor's own statuses and tasks (kept in their browser, sent with each turn)."""
+
+    statuses: dict[int, AgentStatus] = Field(default_factory=dict)
+    tasks: list[AgentTask] = Field(default_factory=list, max_length=200)
+
+
+class AgentRequest(BaseModel):
+    text: str = Field(default="", max_length=500)
+    history: list[AgentTurn] = Field(default_factory=list, max_length=20)
+    state: AgentState = Field(default_factory=AgentState)
+
+
+class CardOut(BaseModel):
+    kind: Literal["draft", "status", "task"]
+    message_id: int
+    guest_name: str
+    property_name: str
+    draft: str = ""
+    language: str = "en"
+    language_label: str = "English"
+    confidence: str = "medium"
+    needs_host: bool = False
+    facts_used: list[FactRef] = Field(default_factory=list)
+    status: str = ""
+    task: TaskSuggestion | None = None
+
+
+class AgentOut(BaseModel):
+    text: str
+    cards: list[CardOut]
+    highlight: list[int]
+    focus: int | None = None
+    by: str
+    ai_left_today: int | None = None
+    note: str | None = None

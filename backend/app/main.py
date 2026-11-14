@@ -3,7 +3,7 @@
 import os
 import threading
 from collections.abc import Iterator
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -13,10 +13,24 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from . import ratelimit
+from .agent import (
+    SUGGESTIONS,
+    AgentInput,
+    AgentReply,
+    Card,
+    InboxItem,
+    PropertyInfo,
+    RulesAgent,
+    Turn,
+    build_agent,
+)
 from .config import Settings, load_settings
 from .db import make_engine, make_session_factory
 from .models import Message, Property
 from .schemas import (
+    AgentOut,
+    AgentRequest,
+    CardOut,
     FactOut,
     FactRef,
     LiveTriageOut,
@@ -119,6 +133,91 @@ def _triage_input(body: str, guest: str, prop: Property | None) -> TriageInput:
     return TriageInput(body, guest, prop.name, dict(prop.facts or {}))
 
 
+def _utc_naive(ms: int) -> datetime:
+    return datetime.fromtimestamp(ms / 1000, timezone.utc).replace(tzinfo=None)
+
+
+def agent_input(
+    session: Session, payload: AgentRequest, text: str, now: datetime | None = None
+) -> AgentInput:
+    """The inbox as this visitor sees it: saved messages plus their own statuses and tasks."""
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
+    clock = demo_clock_offset(session)
+    open_tasks: dict[int, list[str]] = {}
+    for t in payload.state.tasks:
+        if not t.done:
+            open_tasks.setdefault(t.message_id, []).append(t.title.strip()[:120])
+    items = []
+    query = select(Message).options(joinedload(Message.property)).order_by(Message.id)
+    for m in session.scalars(query):
+        out = _message_out(m, clock)
+        own = payload.state.statuses.get(m.id)
+        status = own.status if own else out.status
+        if status == "new":
+            end = now
+        elif own and own.replied_at_ms:
+            end = _utc_naive(own.replied_at_ms)
+        else:
+            end = out.replied_at or now
+        t = out.triage
+        items.append(
+            InboxItem(
+                id=m.id,
+                guest_name=m.guest_name,
+                property_id=m.property_id,
+                property_name=m.property.name,
+                category=m.category,
+                urgent=m.urgent,
+                needs_host=t.needs_host,
+                status=status,
+                wait_minutes=max(0, int((end - out.received_at).total_seconds() // 60)),
+                body=m.body,
+                draft_reply=m.draft_reply,
+                language=t.language,
+                confidence=t.confidence,
+                facts_used=tuple(f.key for f in t.facts_used),
+                task_title=m.task_title or "",
+                task_assignee=m.task_assignee or "",
+                task_due_minutes=m.task_due_minutes or 0,
+                open_tasks=tuple(open_tasks.get(m.id, ())),
+            )
+        )
+    props = tuple(
+        PropertyInfo(p.id, p.name, p.city, dict(p.facts or {}))
+        for p in session.scalars(select(Property).order_by(Property.id))
+    )
+    history = tuple(Turn(t.role, t.text) for t in payload.history[-8:])
+    return AgentInput(text=text, items=tuple(items), properties=props, history=history)
+
+
+def _card_out(c: Card, item: AgentInput) -> CardOut:
+    target = item.item(c.message_id)
+    assert target is not None  # cards are checked against the inbox when they are made
+    return CardOut(
+        kind=c.kind,
+        message_id=c.message_id,
+        guest_name=target.guest_name,
+        property_name=target.property_name,
+        draft=c.draft,
+        language=c.language,
+        language_label=language_label(c.language),
+        confidence=c.confidence,
+        needs_host=c.kind == "draft" and c.confidence == "low",
+        facts_used=[FactRef(key=k, label=FACT_LABELS.get(k, k)) for k in c.facts_used],
+        status=c.status,
+        task=(
+            TaskSuggestion(
+                title=c.task_title,
+                assignee=c.task_assignee,
+                assignee_label=TASK_ASSIGNEES.get(c.task_assignee, c.task_assignee),
+                due_minutes=c.task_due_minutes,
+            )
+            if c.kind == "task"
+            else None
+        ),
+    )
+
+
 def client_ip(request: Request) -> str:
     # Vercel sets x-real-ip / x-forwarded-for itself, so clients cannot spoof them there.
     real = request.headers.get("x-real-ip", "").strip()
@@ -130,11 +229,13 @@ def client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def create_app(settings: Settings | None = None, triager=None) -> FastAPI:
+def create_app(settings: Settings | None = None, triager=None, agent=None) -> FastAPI:
     settings = settings or load_settings()
     engine = make_engine(settings.database_url)
     session_factory = make_session_factory(engine)
     triager = triager or build_triager(settings)
+    agent = agent or build_agent(settings)
+    rules = RulesAgent()
 
     app = FastAPI(title="Guest Inbox Assistant", version="0.1.0")
     app.state.engine = engine
@@ -180,6 +281,8 @@ def create_app(settings: Settings | None = None, triager=None) -> FastAPI:
             categories={c: CATEGORY_LABELS[c] for c in CATEGORIES},
             max_message_chars=settings.max_message_chars,
             rate_limit_per_hour=settings.rate_limit_per_hour,
+            agent_limit_per_day=settings.agent_limit_per_day,
+            suggestions=list(SUGGESTIONS),
         )
 
     @app.get("/api/properties", response_model=list[PropertyOut])
@@ -244,6 +347,44 @@ def create_app(settings: Settings | None = None, triager=None) -> FastAPI:
         left = spend_call(request, session)
         result = triager.triage(_triage_input(body, payload.guest_name.strip() or "Guest", prop))
         return LiveTriageOut(triage=_from_result(result), calls_left_this_hour=left)
+
+    @app.post("/api/agent", response_model=AgentOut)
+    def agent_turn(
+        payload: AgentRequest, request: Request, session: Session = Depends(get_session)
+    ) -> AgentOut:
+        """One turn with the inbox assistant. It only proposes; the browser applies approvals.
+
+        An empty text asks for the opening briefing, which the rules answer for free.
+        """
+        text = payload.text.strip()
+        item = agent_input(session, payload, text)
+        note, left = None, None
+        if not text or agent.name == rules.name:
+            reply: AgentReply = rules.respond(item)
+        else:
+            visitor = ratelimit.visitor_hash(client_ip(request), settings.rate_limit_salt)
+            allowed, left = ratelimit.check_and_count(
+                session, visitor, settings.agent_limit_per_day, daily=True
+            )
+            if allowed:
+                reply = agent.respond(item)
+                if reply.by.endswith("(fallback)"):
+                    note = "The AI is unavailable right now, so the quick commands answered."
+            else:
+                reply = rules.respond(item)
+                note = (
+                    f"You've used today's {settings.agent_limit_per_day} AI replies, so the "
+                    "quick commands answer until tomorrow."
+                )
+        return AgentOut(
+            text=reply.text,
+            cards=[_card_out(c, item) for c in reply.cards],
+            highlight=list(reply.highlight),
+            focus=reply.focus,
+            by=reply.by,
+            ai_left_today=left,
+            note=note,
+        )
 
     _mount_frontend(app)
     return app

@@ -22,11 +22,25 @@ def current_window(now: datetime | None = None) -> datetime:
     return now.replace(minute=0, second=0, microsecond=0, tzinfo=None)
 
 
+def day_window(now: datetime | None = None) -> datetime:
+    """Start of the current UTC day: the window for daily limits."""
+    return current_window(now).replace(hour=0)
+
+
 def check_and_count(
-    session: Session, visitor: str, limit: int, now: datetime | None = None
+    session: Session,
+    visitor: str,
+    limit: int,
+    now: datetime | None = None,
+    daily: bool = False,
 ) -> tuple[bool, int]:
-    """Count one call. Returns (allowed, calls left this hour)."""
-    window = current_window(now)
+    """Count one call. Returns (allowed, calls left in this hour, or this day if `daily`).
+
+    Daily counters use their own key (`day:` + visitor) so they never mix with hourly ones.
+    """
+    if daily:
+        visitor = f"day:{visitor}"[:64]
+    window = day_window(now) if daily else current_window(now)
     hit = session.get(RateHit, (visitor, window))
     used = hit.count if hit else 0
     if used >= limit:
@@ -36,7 +50,9 @@ def check_and_count(
     else:
         hit.count = used + 1
     # Old windows are useless: drop anything older than a day.
-    session.execute(delete(RateHit).where(RateHit.window_start < window - timedelta(days=1)))
+    session.execute(
+        delete(RateHit).where(RateHit.window_start < current_window(now) - timedelta(days=2))
+    )
     session.commit()
     return True, limit - used - 1
 

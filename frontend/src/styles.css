@@ -720,3 +720,280 @@ h3 {
   text-decoration: underline;
   font: inherit;
 }
+
+/* v2: chat-first layout with the inbox assistant */
+.page-wide {
+  max-width: 1320px;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 16px;
+  height: calc(100vh - 150px);
+  min-height: 560px;
+}
+
+.chat-col,
+.side-col {
+  min-height: 0;
+  height: 100%;
+}
+
+.side-col {
+  overflow-y: auto;
+}
+
+.side-col .list {
+  max-height: none;
+}
+
+.side-col .detail {
+  padding: 14px;
+}
+
+.back {
+  margin-bottom: 8px;
+}
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.chat-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bubble {
+  max-width: 88%;
+  padding: 10px 14px;
+  border-radius: 12px;
+}
+
+.bubble-host {
+  align-self: flex-end;
+  background: var(--brand);
+  color: #fff;
+  white-space: pre-wrap;
+}
+
+.bubble-assistant {
+  align-self: flex-start;
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+
+.bubble-text p {
+  margin: 0 0 6px;
+  white-space: pre-wrap;
+}
+
+.bubble-list {
+  margin: 4px 0 6px;
+  padding-left: 18px;
+}
+
+.bubble-note {
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.bubble-by {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.75rem;
+}
+
+.bubble-busy {
+  font-style: italic;
+}
+
+.acards {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.acards > .btn {
+  justify-self: start;
+}
+
+.acard {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--brand);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.acard-task {
+  border-left-color: #5b21b6;
+}
+
+.acard-status {
+  border-left-color: var(--muted);
+}
+
+.acard-approved {
+  opacity: 0.8;
+}
+
+.acard-dismissed {
+  opacity: 0.5;
+}
+
+.acard-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.acard-draft {
+  margin: 6px 0;
+  white-space: pre-wrap;
+}
+
+.acard .task-form {
+  margin-top: 6px;
+}
+
+.acard-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.btn-small {
+  padding: 5px 10px;
+  font-size: 0.85rem;
+}
+
+.acard-result-approved {
+  color: var(--brand);
+  font-weight: 600;
+}
+
+.chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.chip-suggest {
+  font: inherit;
+  font-size: 0.82rem;
+  border: 1px solid var(--brand);
+  color: var(--brand);
+  background: var(--card);
+  border-radius: 999px;
+  padding: 4px 10px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chip-suggest:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.composer {
+  padding: 4px 12px 12px;
+}
+
+.composer-paste {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.composer-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.composer-input {
+  resize: none;
+}
+
+.composer-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.filters-compact {
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.filters-compact .filter {
+  font-size: 0.8rem;
+  padding: 3px 9px;
+}
+
+.row-hl {
+  background: #f0fdfa;
+  box-shadow: inset 0 0 0 1px var(--brand);
+}
+
+.pane-switch {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .pane-switch {
+    display: flex;
+    width: fit-content;
+    margin-bottom: 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--card);
+  }
+
+  .shell {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+  }
+
+  .shell-chat .side-col,
+  .shell-side .chat-col {
+    display: none;
+  }
+
+  .chat {
+    height: calc(100vh - 200px);
+    min-height: 460px;
+  }
+
+  .bubble {
+    max-width: 96%;
+  }
+
+  .composer-paste {
+    grid-template-columns: 1fr;
+  }
+}
