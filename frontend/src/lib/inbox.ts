@@ -1,10 +1,11 @@
-import type { Category, Filter, Message } from "../types";
+import type { Category, Fact, Filter, Message, Property, Triage } from "../types";
 
 /** Messages that match the selected filter, urgent first, then newest first. */
 export function filterMessages(messages: Message[], filter: Filter): Message[] {
   const picked = messages.filter((m) => {
     if (filter === "all") return true;
     if (filter === "urgent") return m.triage.urgent;
+    if (filter === "needs_host") return m.triage.needs_host;
     return m.triage.category === filter;
   });
   return [...picked].sort((a, b) => {
@@ -18,6 +19,7 @@ export function countByFilter(messages: Message[]): Record<Filter, number> {
   const counts: Record<Filter, number> = {
     all: messages.length,
     urgent: 0,
+    needs_host: 0,
     check_in: 0,
     complaint: 0,
     maintenance: 0,
@@ -26,6 +28,7 @@ export function countByFilter(messages: Message[]): Record<Filter, number> {
   };
   for (const m of messages) {
     if (m.triage.urgent) counts.urgent += 1;
+    if (m.triage.needs_host) counts.needs_host += 1;
     counts[m.triage.category as Category] += 1;
   }
   return counts;
@@ -50,4 +53,20 @@ export function timeAgo(value: string, now: number = Date.now()): string {
 export function preview(body: string, max = 90): string {
   const flat = body.replace(/\s+/g, " ").trim();
   return flat.length <= max ? flat : `${flat.slice(0, max - 1).trimEnd()}…`;
+}
+
+/** The property's fact sheet, with the facts this triage relied on marked. */
+export function factSheet(
+  property: Property | undefined,
+  triage: Triage | undefined,
+): (Fact & { used: boolean })[] {
+  if (!property) return [];
+  const used = new Set((triage?.facts_used ?? []).map((f) => f.key));
+  return property.facts.map((f) => ({ ...f, used: used.has(f.key) }));
+}
+
+/** Badge text for the draft's confidence. */
+export function confidenceLabel(triage: Triage): string {
+  if (triage.needs_host) return "Needs host";
+  return triage.confidence === "high" ? "High confidence" : "Medium confidence";
 }

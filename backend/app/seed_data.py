@@ -5,11 +5,69 @@ inbox loads instantly without spending LLM quota. "Re-run triage" in the UI call
 provider on the same text.
 """
 
+# Fact sheets: the only property details a draft may use. Invented, like everything else.
 PROPERTIES: list[dict] = [
-    {"key": "seaview", "name": "Seaview Loft", "city": "Penang"},
-    {"key": "garden", "name": "Garden Terrace House", "city": "Ipoh"},
-    {"key": "skyline", "name": "Skyline Studio 12B", "city": "Kuala Lumpur"},
-    {"key": "kampung", "name": "Kampung Chalet", "city": "Langkawi"},
+    {
+        "key": "seaview",
+        "name": "Seaview Loft",
+        "city": "Penang",
+        "facts": {
+            "check_in": "From 3pm, self check-in with a smart lock (code sent on arrival day)",
+            "check_out": "By 11am",
+            "wifi": "Network SeaviewLoft-Guest, password seaview2026",
+            "parking": "One free bay in the basement, B1-07",
+            "house_rules": "No smoking, no parties, quiet hours 11pm to 7am",
+            "utilities": "Main water valve: cupboard under the kitchen sink (red handle). "
+            "Gas valve: behind the stove",
+            "caretaker": "On call 24/7 through this chat; plumber and technician on call",
+        },
+    },
+    {
+        "key": "garden",
+        "name": "Garden Terrace House",
+        "city": "Ipoh",
+        "facts": {
+            "check_in": "From 1pm (cleaning until 1pm), self check-in with a lockbox at any "
+            "time after that; bags can be dropped from 10am",
+            "check_out": "By 11am",
+            "wifi": "Network GardenTerrace, password tehtarik88",
+            "parking": "Private driveway for 2 cars",
+            "pets": "Small dogs welcome, one-off cleaning fee RM40; garden fully fenced",
+            "house_rules": "Quiet hours after 11pm (residents' association rule)",
+            "nearby": "Breakfast: Kedai Kopi Sin Yoon Loong, 7-minute walk, opens 7am",
+        },
+    },
+    {
+        "key": "skyline",
+        "name": "Skyline Studio 12B",
+        "city": "Kuala Lumpur",
+        "facts": {
+            "check_in": "From 3pm, door code sent by message on arrival day; backup lockbox "
+            "code available from the host",
+            "check_out": "By 12pm",
+            "wifi": "Network Skyline12B, password klcc2026; router in the TV cabinet",
+            "parking": "Visitor parking on level P2: take a ticket, the host sends a free exit "
+            "pass; lift lobby next to bay 40",
+            "house_rules": "No smoking; pool open 7am to 10pm",
+            "caretaker": "Aiman, about 15 minutes away",
+        },
+    },
+    {
+        "key": "kampung",
+        "name": "Kampung Chalet",
+        "city": "Langkawi",
+        "facts": {
+            "check_in": "From 2pm, the caretaker meets you at the chalet",
+            "check_out": "By 11am; late check-out until 2pm is free when there is no arrival "
+            "that day",
+            "wifi": "Network KampungChalet, password pantaicenang",
+            "parking": "Free parking next to the chalet",
+            "max_guests": "Sleeps up to 4; extra guest fee RM50 per night",
+            "cancellation": "Free cancellation up to 7 days before arrival",
+            "utilities": "Fuse box behind the front door",
+            "caretaker": "About 20 minutes away",
+        },
+    },
 ]
 
 # minutes_ago: how long before seeding the message arrived.
@@ -17,6 +75,8 @@ MESSAGES: list[dict] = [
     {
         "property": "skyline",
         "guest": "Daniel Weber",
+        "facts_used": ["check_in", "caretaker"],
+        "confidence": "high",
         "minutes_ago": 6,
         "body": "Hi, we're standing outside the building and the door code isn't working. "
         "We're locked out with two kids and all our luggage. Please help!",
@@ -30,6 +90,8 @@ MESSAGES: list[dict] = [
     {
         "property": "seaview",
         "guest": "Priya Nair",
+        "facts_used": ["utilities", "caretaker"],
+        "confidence": "high",
         "minutes_ago": 14,
         "body": "There's water leaking from the ceiling in the bathroom and it's flooding "
         "onto the floor. What should we do?",
@@ -43,6 +105,8 @@ MESSAGES: list[dict] = [
     {
         "property": "garden",
         "guest": "Tom Hughes",
+        "facts_used": ["check_in"],
+        "confidence": "high",
         "minutes_ago": 32,
         "body": "Hello! Could we check in early tomorrow, around 11am? Our flight lands at 9.",
         "category": "check_in",
@@ -55,6 +119,8 @@ MESSAGES: list[dict] = [
     {
         "property": "kampung",
         "guest": "Mei Ling Tan",
+        "facts_used": [],
+        "confidence": "medium",
         "minutes_ago": 47,
         "body": "We're having a great time! Would it be possible to extend our stay by "
         "another night, until Sunday?",
@@ -68,6 +134,8 @@ MESSAGES: list[dict] = [
     {
         "property": "skyline",
         "guest": "Ahmad Faris",
+        "facts_used": [],
+        "confidence": "medium",
         "minutes_ago": 63,
         "body": "Honestly disappointed. The sheets have stains and the bathroom smells. "
         "This is not what the photos showed. Unacceptable for the price.",
@@ -81,6 +149,8 @@ MESSAGES: list[dict] = [
     {
         "property": "seaview",
         "guest": "Sophie Martin",
+        "facts_used": [],
+        "confidence": "medium",
         "minutes_ago": 88,
         "body": "The air conditioner in the bedroom stopped working last night. "
         "It just blinks a red light.",
@@ -94,6 +164,8 @@ MESSAGES: list[dict] = [
     {
         "property": "garden",
         "guest": "Rajesh Kumar",
+        "facts_used": ["nearby"],
+        "confidence": "high",
         "minutes_ago": 120,
         "body": "Is there a good place for breakfast within walking distance? "
         "Somewhere local would be great.",
@@ -106,6 +178,8 @@ MESSAGES: list[dict] = [
     {
         "property": "kampung",
         "guest": "Lucas Silva",
+        "facts_used": ["cancellation"],
+        "confidence": "high",
         "minutes_ago": 150,
         "body": "Hi, we need to cancel our booking for next month, family emergency. "
         "What is the cancellation policy?",
@@ -119,6 +193,8 @@ MESSAGES: list[dict] = [
     {
         "property": "skyline",
         "guest": "Hannah Lee",
+        "facts_used": ["parking"],
+        "confidence": "high",
         "minutes_ago": 190,
         "body": "Where do we park? Is there visitor parking in the building?",
         "category": "check_in",
@@ -130,6 +206,8 @@ MESSAGES: list[dict] = [
     {
         "property": "seaview",
         "guest": "Oliver Brown",
+        "facts_used": ["utilities"],
+        "confidence": "high",
         "minutes_ago": 240,
         "body": "There is a strong smell of gas in the kitchen when we turn on the stove.",
         "category": "maintenance",
@@ -142,6 +220,8 @@ MESSAGES: list[dict] = [
     {
         "property": "garden",
         "guest": "Aisha Rahman",
+        "facts_used": ["house_rules"],
+        "confidence": "medium",
         "minutes_ago": 300,
         "body": "Our neighbours have been very noisy past midnight two nights in a row. "
         "We can't sleep.",
@@ -155,6 +235,8 @@ MESSAGES: list[dict] = [
     {
         "property": "kampung",
         "guest": "Kenji Sato",
+        "facts_used": ["max_guests"],
+        "confidence": "high",
         "minutes_ago": 360,
         "body": "Can we bring one more guest? My brother wants to join us on Friday.",
         "category": "booking_change",
@@ -167,6 +249,8 @@ MESSAGES: list[dict] = [
     {
         "property": "skyline",
         "guest": "Emma Wilson",
+        "facts_used": ["wifi"],
+        "confidence": "medium",
         "minutes_ago": 420,
         "body": "The wifi is down since this morning and I need it for work calls.",
         "category": "maintenance",
@@ -179,6 +263,8 @@ MESSAGES: list[dict] = [
     {
         "property": "seaview",
         "guest": "Farid Ismail",
+        "facts_used": [],
+        "confidence": "high",
         "minutes_ago": 500,
         "body": "Thank you for the lovely stay! Everything was perfect.",
         "category": "general_question",
@@ -190,6 +276,8 @@ MESSAGES: list[dict] = [
     {
         "property": "garden",
         "guest": "Chloe Dubois",
+        "facts_used": ["check_in"],
+        "confidence": "high",
         "minutes_ago": 600,
         "body": "We're arriving late, around 11pm. Is self check-in available?",
         "category": "check_in",
@@ -201,6 +289,8 @@ MESSAGES: list[dict] = [
     {
         "property": "kampung",
         "guest": "Marco Rossi",
+        "facts_used": ["check_out"],
+        "confidence": "high",
         "minutes_ago": 720,
         "body": "Could we get a late checkout on Sunday, maybe 2pm?",
         "category": "booking_change",
@@ -212,6 +302,8 @@ MESSAGES: list[dict] = [
     {
         "property": "skyline",
         "guest": "Nur Aina",
+        "facts_used": [],
+        "confidence": "medium",
         "minutes_ago": 850,
         "body": "The toilet is blocked and won't flush. Can someone come?",
         "category": "maintenance",
@@ -223,6 +315,8 @@ MESSAGES: list[dict] = [
     {
         "property": "seaview",
         "guest": "James Taylor",
+        "facts_used": [],
+        "confidence": "medium",
         "minutes_ago": 1000,
         "body": "Saw a few cockroaches in the kitchen last night. Pretty gross, to be honest.",
         "category": "complaint",
@@ -234,6 +328,8 @@ MESSAGES: list[dict] = [
     {
         "property": "garden",
         "guest": "Siti Hajar",
+        "facts_used": ["pets"],
+        "confidence": "high",
         "minutes_ago": 1200,
         "body": "Are pets allowed? We'd like to bring our small dog next time.",
         "category": "general_question",
@@ -245,6 +341,8 @@ MESSAGES: list[dict] = [
     {
         "property": "kampung",
         "guest": "Ben Carter",
+        "facts_used": ["utilities", "caretaker"],
+        "confidence": "high",
         "minutes_ago": 1400,
         "body": "Power cut in the chalet, no electricity at all. Everything is dark.",
         "category": "maintenance",
@@ -253,5 +351,92 @@ MESSAGES: list[dict] = [
         "draft": "Hi Ben, sorry about this. The fuse box is behind the front door: please check "
         "whether the main switch has tripped and push it back up. I'm calling you now, and if "
         "that doesn't fix it our caretaker will be there within 20 minutes.",
+    },
+    {
+        "property": "skyline",
+        "guest": "Grace Okafor",
+        "minutes_ago": 22,
+        "body": "Is the rooftop pool heated? And can we use the BBQ pits up there tonight?",
+        "category": "general_question",
+        "urgent": False,
+        "reason": "Asks about pool heating and BBQ use; not on the fact sheet.",
+        "draft": "Hi Grace, thanks for asking! The pool is open 7am to 10pm. I don't want to "
+        "guess about the heating or the BBQ pits, so I'll check with building management and "
+        "get back to you within the hour.",
+        "facts_used": ["house_rules"],
+        "confidence": "low",
+    },
+    {
+        "property": "skyline",
+        "guest": "Hafiz Rahim",
+        "minutes_ago": 9,
+        "language": "ms",
+        "body": "Tolong! Air tak keluar langsung dari paip sejak pagi. Kami tak boleh mandi.",
+        "category": "maintenance",
+        "urgent": True,
+        "reason": "No water at all since the morning.",
+        "draft": "Hai Hafiz, maaf atas kesulitan ini. Kami sedang uruskan sekarang: Aiman, "
+        "penjaga kami, akan tiba dalam masa 15 minit untuk memeriksa bekalan air. Saya akan "
+        "hubungi anda sebentar lagi.",
+        "facts_used": ["caretaker"],
+        "confidence": "high",
+    },
+    {
+        "property": "garden",
+        "guest": "Nurul Aisyah",
+        "minutes_ago": 75,
+        "language": "ms",
+        "body": "Salam, boleh kami daftar masuk awal esok pukul 11 pagi? Penerbangan kami "
+        "tiba pukul 9.",
+        "category": "check_in",
+        "urgent": False,
+        "reason": "Asks for early check-in at 11am tomorrow.",
+        "draft": "Salam Nurul, terima kasih! Rumah sedang dibersihkan sehingga pukul 1 "
+        "petang, tetapi saya akan cuba sediakan lebih awal dan sahkan malam ini. Anda boleh "
+        "tinggalkan beg di rumah mulai pukul 10 pagi.",
+        "facts_used": ["check_in"],
+        "confidence": "high",
+    },
+    {
+        "property": "seaview",
+        "guest": "Wang Li",
+        "minutes_ago": 40,
+        "language": "zh",
+        "body": "你好，请问WiFi密码是多少？我们找不到。",
+        "category": "general_question",
+        "urgent": False,
+        "reason": "Asks for the Wi-Fi password.",
+        "draft": "Wang Li，您好！WiFi 网络名称是 SeaviewLoft-Guest，密码是 seaview2026。"
+        "如果连接不上，请随时告诉我。",
+        "facts_used": ["wifi"],
+        "confidence": "high",
+    },
+    {
+        "property": "kampung",
+        "guest": "Chen Jie",
+        "minutes_ago": 260,
+        "language": "zh",
+        "body": "我们星期天可以延迟退房到下午两点吗？",
+        "category": "booking_change",
+        "urgent": False,
+        "reason": "Asks for a 2pm late check-out on Sunday.",
+        "draft": "Chen Jie，您好！如果当天没有新客人入住，可以免费延迟到下午两点退房。"
+        "我确认后马上告诉您。",
+        "facts_used": ["check_out"],
+        "confidence": "medium",
+    },
+    {
+        "property": "garden",
+        "guest": "Camille Laurent",
+        "minutes_ago": 540,
+        "language": "fr",
+        "body": "Bonjour, est-ce qu'il y a un parking sur place ? Nous arrivons en voiture samedi.",
+        "category": "check_in",
+        "urgent": False,
+        "reason": "Asks about parking for arrival by car.",
+        "draft": "Bonjour Camille, oui : la maison dispose d'une allée privée pour deux "
+        "voitures. L'arrivée est possible à partir de 13h avec la boîte à clés. Bon voyage !",
+        "facts_used": ["parking", "check_in"],
+        "confidence": "high",
     },
 ]

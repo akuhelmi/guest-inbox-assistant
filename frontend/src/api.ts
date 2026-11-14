@@ -1,4 +1,4 @@
-import type { LiveTriage, Message, Meta } from "./types";
+import type { LiveTriage, Message, Meta, Property } from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -21,11 +21,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   meta: () => request<Meta>("/api/meta"),
   messages: () => request<Message[]>("/api/messages"),
+  properties: () => request<Property[]>("/api/properties"),
   retriage: (id: number) =>
     request<LiveTriage>(`/api/messages/${id}/triage`, { method: "POST" }),
-  triageText: (body: string, guestName: string) =>
+  triageText: (body: string, guestName: string, propertyId: number | null) =>
     request<LiveTriage>("/api/triage", {
       method: "POST",
-      body: JSON.stringify({ body, guest_name: guestName }),
+      body: JSON.stringify({ body, guest_name: guestName, property_id: propertyId }),
     }),
 };

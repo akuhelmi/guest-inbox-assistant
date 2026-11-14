@@ -1,7 +1,12 @@
 from datetime import datetime
 
+from fastapi.testclient import TestClient
+
+from app.main import create_app
 from app.ratelimit import check_and_count
-from app.seed_data import MESSAGES
+from app.seed_data import MESSAGES, PROPERTIES
+from app.triage.offline import OfflineTriager
+from tests.conftest import TEST_DB, make_settings
 
 
 def test_health_and_meta(client):
@@ -92,3 +97,86 @@ def test_rate_window_resets_next_hour(client):
         assert check_and_count(session, "v", 1, now=t1) == (True, 0)
         assert check_and_count(session, "v", 1, now=t1) == (False, 0)
         assert check_and_count(session, "v", 1, now=datetime(2026, 1, 1, 11, 0))[0] is True
+
+
+def test_properties_list_their_fact_sheets(client):
+    props = client.get("/api/properties").json()
+    assert [p["name"] for p in props] == [p["name"] for p in PROPERTIES]
+    seaview = props[0]
+    wifi = next(f for f in seaview["facts"] if f["key"] == "wifi")
+    assert wifi["label"] == "Wi-Fi" and "seaview2026" in wifi["value"]
+
+
+def test_messages_carry_language_confidence_and_facts_used(client):
+    msgs = {m["guest_name"]: m for m in client.get("/api/messages").json()}
+    wang = msgs["Wang Li"]["triage"]
+    assert wang["language"] == "zh" and wang["language_label"] == "Chinese"
+    assert wang["facts_used"] == [{"key": "wifi", "label": "Wi-Fi"}]
+    assert wang["needs_host"] is False
+    grace = msgs["Grace Okafor"]["triage"]
+    assert grace["confidence"] == "low" and grace["needs_host"] is True
+    assert msgs["Wang Li"]["property_id"] == msgs["Farid Ismail"]["property_id"]
+
+
+def test_paste_triage_uses_the_chosen_propertys_facts(client):
+    garden = client.get("/api/properties").json()[1]
+    res = client.post(
+        "/api/triage",
+        json={
+            "body": "What's the wifi password?",
+            "guest_name": "Ana",
+            "property_id": garden["id"],
+        },
+    )
+    triage = res.json()["triage"]
+    assert "tehtarik88" in triage["draft_reply"]
+    assert triage["facts_used"] == [{"key": "wifi", "label": "Wi-Fi"}]
+    # Without a property there are no facts, so it says it will check.
+    plain = client.post("/api/triage", json={"body": "What's the wifi password?"}).json()
+    assert plain["triage"]["facts_used"] == [] and plain["triage"]["needs_host"] is True
+    unknown = client.post("/api/triage", json={"body": "Hi", "property_id": 99999})
+    assert unknown.status_code == 422
+
+
+def test_old_database_is_upgraded_and_rate_counters_are_kept(tmp_path):
+    """A v1 database (no data version, old columns) is rebuilt on the first request."""
+    from sqlalchemy import Column, Integer, MetaData, String, Table, insert, inspect
+
+    from app.config import normalize_db_url
+    from app.db import Base, make_engine
+    from app.models import RateHit
+    from app.seed import DATA_VERSION
+
+    # In-memory SQLite lives per engine, so use a file here; Postgres (CI) is shared anyway.
+    url = f"sqlite:///{tmp_path}/old.db" if TEST_DB.startswith("sqlite") else TEST_DB
+    settings = make_settings(database_url=normalize_db_url(url))
+    engine = make_engine(settings.database_url)
+    Base.metadata.drop_all(engine)
+    old = MetaData()
+    Table("properties", old, Column("id", Integer, primary_key=True), Column("name", String(120)))
+    old.create_all(engine)
+    RateHit.__table__.create(engine)
+    with engine.begin() as conn:
+        conn.execute(insert(old.tables["properties"]).values(name="Old"))
+        conn.execute(
+            insert(RateHit.__table__).values(
+                visitor_hash="v1", window_start=datetime(2026, 1, 1, 10), count=3
+            )
+        )
+    engine.dispose()
+
+    app = create_app(settings, triager=OfflineTriager())
+    try:
+        with TestClient(app) as c:
+            assert len(c.get("/api/messages").json()) == len(MESSAGES)
+            names = [p["name"] for p in c.get("/api/properties").json()]
+            assert "Old" not in names
+        eng = app.state.engine
+        assert "facts" in {col["name"] for col in inspect(eng).get_columns("properties")}
+        with eng.connect() as conn:
+            assert conn.execute(RateHit.__table__.select()).first().count == 3
+            meta = conn.exec_driver_sql("SELECT value FROM app_meta").scalar()
+            assert meta == DATA_VERSION
+    finally:
+        Base.metadata.drop_all(app.state.engine)
+        app.state.engine.dispose()

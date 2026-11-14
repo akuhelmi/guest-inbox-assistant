@@ -1,8 +1,9 @@
-"""Tables: properties, guest messages with their saved triage, and rate-limit counters."""
+"""Tables: properties (with fact sheets), guest messages with their saved triage, rate-limit
+counters and a small key/value table that records the demo data version."""
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -14,6 +15,8 @@ class Property(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120))
     city: Mapped[str] = mapped_column(String(80))
+    # Fact sheet: key (see triage.FACT_LABELS) -> value. Drafts may only use these facts.
+    facts: Mapped[dict] = mapped_column(JSON, default=dict)
 
     messages: Mapped[list["Message"]] = relationship(back_populates="property")
 
@@ -33,6 +36,9 @@ class Message(Base):
     reason: Mapped[str] = mapped_column(String(300))
     draft_reply: Mapped[str] = mapped_column(Text)
     triaged_by: Mapped[str] = mapped_column(String(40))
+    language: Mapped[str] = mapped_column(String(8), default="en")
+    confidence: Mapped[str] = mapped_column(String(8), default="medium")
+    facts_used: Mapped[list] = mapped_column(JSON, default=list)
 
     property: Mapped[Property] = relationship(back_populates="messages")
 
@@ -45,3 +51,12 @@ class RateHit(Base):
     visitor_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     window_start: Mapped[datetime] = mapped_column(DateTime, primary_key=True)
     count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class AppMeta(Base):
+    """Key/value settings kept in the database, e.g. the demo data version."""
+
+    __tablename__ = "app_meta"
+
+    key: Mapped[str] = mapped_column(String(40), primary_key=True)
+    value: Mapped[str] = mapped_column(String(200))

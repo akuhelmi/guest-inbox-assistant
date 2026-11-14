@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
-import { MessageRow, TriagePanel } from "./components";
+import { FactSheet, MessageRow, TriagePanel } from "./components";
 import { countByFilter, filterMessages, timeAgo } from "./lib/inbox";
-import type { Filter, LiveTriage, Message, Meta } from "./types";
+import type { Filter, LiveTriage, Message, Meta, Property } from "./types";
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: "all", label: "All" },
   { key: "urgent", label: "Urgent" },
+  { key: "needs_host", label: "Needs host" },
   { key: "check_in", label: "Check-in" },
   { key: "complaint", label: "Complaint" },
   { key: "maintenance", label: "Maintenance" },
@@ -21,15 +22,17 @@ function providerLabel(provider: string): string {
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [meta, setMeta] = useState<Meta | null>(null);
+  const [properties, setProperties] = useState<Property[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([api.messages(), api.meta()])
-      .then(([msgs, m]) => {
+    Promise.all([api.messages(), api.meta(), api.properties()])
+      .then(([msgs, m, props]) => {
         setMessages(msgs);
         setMeta(m);
+        setProperties(props);
         setSelectedId(msgs[0]?.id ?? null);
       })
       .catch((e: Error) => setLoadError(e.message));
@@ -57,14 +60,14 @@ export default function App() {
 
       {loadError && <p className="error">Could not load the inbox: {loadError}</p>}
 
-      <TryItBox meta={meta} />
+      <TryItBox meta={meta} properties={properties} />
 
       <nav className="filters" aria-label="Filter messages">
         {FILTERS.map((f) => (
           <button
             key={f.key}
             type="button"
-            className={`filter${filter === f.key ? " filter-on" : ""}${f.key === "urgent" ? " filter-urgent" : ""}`}
+            className={`filter${filter === f.key ? " filter-on" : ""}${f.key === "urgent" ? " filter-urgent" : ""}${f.key === "needs_host" ? " filter-host" : ""}`}
             onClick={() => setFilter(f.key)}
             aria-pressed={filter === f.key}
           >
@@ -89,7 +92,12 @@ export default function App() {
         </ul>
         <div className="detail">
           {selected ? (
-            <MessageDetail key={selected.id} message={selected} meta={meta} />
+            <MessageDetail
+              key={selected.id}
+              message={selected}
+              meta={meta}
+              property={properties.find((p) => p.id === selected.property_id)}
+            />
           ) : (
             <p className="muted">Select a message.</p>
           )}
@@ -103,7 +111,15 @@ export default function App() {
   );
 }
 
-function MessageDetail({ message, meta }: { message: Message; meta: Meta | null }) {
+function MessageDetail({
+  message,
+  meta,
+  property,
+}: {
+  message: Message;
+  meta: Meta | null;
+  property?: Property;
+}) {
   const [live, setLive] = useState<LiveTriage | null>(null);
   const [runs, setRuns] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -134,6 +150,7 @@ function MessageDetail({ message, meta }: { message: Message; meta: Meta | null 
       </div>
       <blockquote className="body">{message.body}</blockquote>
       <TriagePanel triage={message.triage} title="Triage" />
+      <FactSheet property={property} triage={live?.triage ?? message.triage} />
       <div className="actions">
         <button type="button" className="btn btn-secondary" onClick={rerun} disabled={busy}>
           {busy ? "Running…" : `Re-run live (${meta ? providerLabel(meta.provider) : "AI"})`}
@@ -148,10 +165,13 @@ function MessageDetail({ message, meta }: { message: Message; meta: Meta | null 
   );
 }
 
-function TryItBox({ meta }: { meta: Meta | null }) {
+function TryItBox({ meta, properties }: { meta: Meta | null; properties: Property[] }) {
   const max = meta?.max_message_chars ?? 1000;
   const [text, setText] = useState("");
   const [guest, setGuest] = useState("");
+  const [picked, setPicked] = useState<number | null>(null);
+  const propertyId = picked ?? properties[0]?.id ?? null;
+  const property = properties.find((p) => p.id === propertyId);
   const [result, setResult] = useState<LiveTriage | null>(null);
   const [runs, setRuns] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -162,7 +182,7 @@ function TryItBox({ meta }: { meta: Meta | null }) {
     setBusy(true);
     setError(null);
     try {
-      setResult(await api.triageText(text.trim(), guest.trim() || "Guest"));
+      setResult(await api.triageText(text.trim(), guest.trim() || "Guest", propertyId));
       setRuns((n) => n + 1);
     } catch (err) {
       setError((err as Error).message);
@@ -176,9 +196,25 @@ function TryItBox({ meta }: { meta: Meta | null }) {
       <form onSubmit={submit}>
         <h2>Try your own guest message</h2>
         <p className="muted small">
-          Type any message a guest might send. It is sorted and answered live, and never stored.
+          Type any message a guest might send, in any language. It is sorted and answered live
+          from the property's facts, and never stored.
         </p>
         <div className="tryit-fields">
+          <select
+            className="input"
+            value={propertyId ?? ""}
+            onChange={(e) => {
+              setPicked(Number(e.target.value));
+              setResult(null);
+            }}
+            aria-label="Property"
+          >
+            {properties.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}, {p.city}
+              </option>
+            ))}
+          </select>
           <input
             className="input"
             placeholder="Guest name (optional)"
@@ -209,6 +245,7 @@ function TryItBox({ meta }: { meta: Meta | null }) {
       </form>
       {error && <p className="error">{error}</p>}
       {result && <TriagePanel key={runs} triage={result.triage} title="Result for your message" fresh />}
+      <FactSheet property={property} triage={result?.triage} />
     </section>
   );
 }

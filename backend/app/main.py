@@ -13,38 +13,90 @@ from sqlalchemy.orm import Session, joinedload
 
 from . import ratelimit
 from .config import Settings, load_settings
-from .db import Base, make_engine, make_session_factory
-from .models import Message
-from .schemas import LiveTriageOut, MessageOut, MetaOut, TriageOut, TriageRequest
-from .seed import seed_if_empty
-from .triage import CATEGORIES, CATEGORY_LABELS, TriageInput, TriageResult, build_triager
-
-
-def _triage_out(category: str, urgent: bool, reason: str, draft: str, by: str) -> TriageOut:
-    return TriageOut(
-        category=category,
-        category_label=CATEGORY_LABELS.get(category, category),
-        urgent=urgent,
-        reason=reason,
-        draft_reply=draft,
-        triaged_by=by,
-    )
+from .db import make_engine, make_session_factory
+from .models import Message, Property
+from .schemas import (
+    FactOut,
+    FactRef,
+    LiveTriageOut,
+    MessageOut,
+    MetaOut,
+    PropertyOut,
+    TriageOut,
+    TriageRequest,
+)
+from .seed import ensure_data
+from .triage import (
+    CATEGORIES,
+    CATEGORY_LABELS,
+    FACT_LABELS,
+    TriageInput,
+    TriageResult,
+    build_triager,
+    language_label,
+)
 
 
 def _from_result(r: TriageResult) -> TriageOut:
-    return _triage_out(r.category, r.urgent, r.reason, r.draft_reply, r.triaged_by)
+    return TriageOut(
+        category=r.category,
+        category_label=CATEGORY_LABELS.get(r.category, r.category),
+        urgent=r.urgent,
+        reason=r.reason,
+        draft_reply=r.draft_reply,
+        triaged_by=r.triaged_by,
+        language=r.language,
+        language_label=language_label(r.language),
+        confidence=r.confidence,
+        needs_host=r.confidence == "low",
+        facts_used=[FactRef(key=k, label=FACT_LABELS.get(k, k)) for k in r.facts_used],
+    )
+
+
+def _saved_result(m: Message) -> TriageResult:
+    return TriageResult(
+        category=m.category,
+        urgent=m.urgent,
+        reason=m.reason,
+        draft_reply=m.draft_reply,
+        triaged_by=m.triaged_by,
+        language=m.language or "en",
+        confidence=m.confidence or "medium",
+        facts_used=tuple(m.facts_used or ()),
+    )
 
 
 def _message_out(m: Message) -> MessageOut:
     return MessageOut(
         id=m.id,
         guest_name=m.guest_name,
+        property_id=m.property_id,
         property_name=m.property.name,
         property_city=m.property.city,
         received_at=m.received_at,
         body=m.body,
-        triage=_triage_out(m.category, m.urgent, m.reason, m.draft_reply, m.triaged_by),
+        triage=_from_result(_saved_result(m)),
     )
+
+
+def _property_out(p: Property) -> PropertyOut:
+    facts = p.facts or {}
+    return PropertyOut(
+        id=p.id,
+        name=p.name,
+        city=p.city,
+        facts=[
+            FactOut(key=k, label=label, value=facts[k])
+            for k, label in FACT_LABELS.items()
+            if k in facts
+        ],
+    )
+
+
+def _triage_input(body: str, guest: str, prop: Property | None) -> TriageInput:
+    if prop is None:
+        return TriageInput(body, guest, "our property")
+    return TriageInput(body, guest, prop.name, dict(prop.facts or {}))
 
 
 def client_ip(request: Request) -> str:
@@ -78,9 +130,7 @@ def create_app(settings: Settings | None = None, triager=None) -> FastAPI:
         with ready_lock:
             if ready.is_set():
                 return
-            Base.metadata.create_all(engine)
-            with session_factory() as session:
-                seed_if_empty(session)
+            ensure_data(engine, session_factory)
             ready.set()
 
     def get_session() -> Iterator[Session]:
@@ -111,6 +161,10 @@ def create_app(settings: Settings | None = None, triager=None) -> FastAPI:
             max_message_chars=settings.max_message_chars,
             rate_limit_per_hour=settings.rate_limit_per_hour,
         )
+
+    @app.get("/api/properties", response_model=list[PropertyOut])
+    def list_properties(session: Session = Depends(get_session)) -> list[PropertyOut]:
+        return [_property_out(p) for p in session.scalars(select(Property).order_by(Property.id))]
 
     @app.get("/api/messages", response_model=list[MessageOut])
     def list_messages(
@@ -145,7 +199,7 @@ def create_app(settings: Settings | None = None, triager=None) -> FastAPI:
         if m is None:
             raise HTTPException(status_code=404, detail="Message not found.")
         left = spend_call(request, session)
-        result = triager.triage(TriageInput(m.body, m.guest_name, m.property.name))
+        result = triager.triage(_triage_input(m.body, m.guest_name, m.property))
         return LiveTriageOut(triage=_from_result(result), calls_left_this_hour=left)
 
     @app.post("/api/triage", response_model=LiveTriageOut)
@@ -161,10 +215,13 @@ def create_app(settings: Settings | None = None, triager=None) -> FastAPI:
                 status_code=422,
                 detail=f"Message is too long (max {settings.max_message_chars} characters).",
             )
+        prop = None
+        if payload.property_id is not None:
+            prop = session.get(Property, payload.property_id)
+            if prop is None:
+                raise HTTPException(status_code=422, detail="Unknown property.")
         left = spend_call(request, session)
-        result = triager.triage(
-            TriageInput(body, payload.guest_name.strip() or "Guest", "our property")
-        )
+        result = triager.triage(_triage_input(body, payload.guest_name.strip() or "Guest", prop))
         return LiveTriageOut(triage=_from_result(result), calls_left_this_hour=left)
 
     _mount_frontend(app)

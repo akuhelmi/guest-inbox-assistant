@@ -1,14 +1,24 @@
 import pytest
 
-from app.seed_data import MESSAGES
+from app.seed_data import MESSAGES, PROPERTIES
 from app.triage.base import CATEGORIES, TriageInput
-from app.triage.offline import OfflineTriager, classify, urgent_signals
+from app.triage.offline import (
+    OfflineTriager,
+    classify,
+    detect_language,
+    matching_facts,
+    urgent_signals,
+)
 
 triager = OfflineTriager()
 
 
-@pytest.mark.parametrize("m", MESSAGES, ids=lambda m: m["guest"])
-def test_offline_rules_agree_with_every_seed_example(m):
+ENGLISH = [m for m in MESSAGES if m.get("language", "en") == "en"]
+OTHER_LANGUAGES = [m for m in MESSAGES if m.get("language", "en") != "en"]
+
+
+@pytest.mark.parametrize("m", ENGLISH, ids=lambda m: m["guest"])
+def test_offline_rules_agree_with_every_english_seed_example(m):
     result = triager.triage(TriageInput(m["body"], m["guest"], "Seaview Loft"))
     assert result.category == m["category"]
     assert result.urgent == m["urgent"]
@@ -57,3 +67,63 @@ def test_urgent_draft_promises_a_quick_call():
     assert result.urgent
     assert "within 15 minutes" in result.draft_reply
     assert result.category in CATEGORIES
+
+
+FACTS = {p["key"]: p["facts"] for p in PROPERTIES}
+
+
+@pytest.mark.parametrize("m", MESSAGES, ids=lambda m: m["guest"])
+def test_language_detection_matches_every_seed_example(m):
+    assert detect_language(m["body"]) == m.get("language", "en")
+
+
+def test_seed_examples_only_use_facts_on_their_property_sheet():
+    for m in MESSAGES:
+        assert set(m["facts_used"]) <= set(FACTS[m["property"]]), m["guest"]
+        assert m["confidence"] in ("high", "medium", "low")
+
+
+@pytest.mark.parametrize("m", OTHER_LANGUAGES, ids=lambda m: m["guest"])
+def test_offline_never_pretends_to_translate(m):
+    result = triager.triage(TriageInput(m["body"], m["guest"], "Seaview Loft"))
+    assert result.language == m["language"]
+    assert result.confidence == "low"
+    assert "Live AI replies in the guest's language" in result.reason
+    assert result.draft_reply.startswith("Hi ")
+
+
+def test_wifi_question_is_answered_from_the_fact_sheet():
+    facts = FACTS["seaview"]
+    result = triager.triage(
+        TriageInput("Hi, what's the wifi password?", "Ana Costa", "Seaview Loft", facts)
+    )
+    assert result.facts_used == ("wifi",)
+    assert result.confidence == "high"
+    assert "seaview2026" in result.draft_reply
+
+
+def test_unknown_question_says_it_will_check_instead_of_inventing():
+    facts = FACTS["skyline"]
+    result = triager.triage(
+        TriageInput("Is the rooftop pool heated?", "Ana Costa", "Skyline", facts)
+    )
+    assert result.facts_used == ()
+    assert result.confidence == "low"
+    assert "check" in result.draft_reply
+    for value in facts.values():
+        assert value not in result.draft_reply
+
+
+def test_facts_are_only_used_when_the_property_has_them():
+    assert matching_facts("Can we bring our dog?", FACTS["garden"]) == ["pets"]
+    assert matching_facts("Can we bring our dog?", FACTS["skyline"]) == []
+
+
+def test_maintenance_draft_adds_useful_facts_but_keeps_the_urgent_promise():
+    facts = FACTS["kampung"]
+    result = triager.triage(
+        TriageInput("Power cut, no electricity at all!", "Ben", "Kampung", facts)
+    )
+    assert result.urgent
+    assert "15 minutes" in result.draft_reply
+    assert "Fuse box behind the front door" in result.draft_reply

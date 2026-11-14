@@ -1,11 +1,20 @@
 import { describe, expect, it } from "vitest";
-import type { Category, Message } from "../types";
-import { countByFilter, filterMessages, parseUtc, preview, timeAgo } from "./inbox";
+import type { Category, Message, Property } from "../types";
+import {
+  confidenceLabel,
+  countByFilter,
+  factSheet,
+  filterMessages,
+  parseUtc,
+  preview,
+  timeAgo,
+} from "./inbox";
 
 function msg(id: number, category: Category, urgent: boolean, receivedAt: string): Message {
   return {
     id,
     guest_name: "Guest",
+    property_id: 1,
     property_name: "Seaview Loft",
     property_city: "Penang",
     received_at: receivedAt,
@@ -17,6 +26,11 @@ function msg(id: number, category: Category, urgent: boolean, receivedAt: string
       reason: "",
       draft_reply: "",
       triaged_by: "saved example",
+      language: "en",
+      language_label: "English",
+      confidence: "medium",
+      needs_host: false,
+      facts_used: [],
     },
   };
 }
@@ -78,5 +92,39 @@ describe("preview", () => {
     const long = preview("word ".repeat(40), 20);
     expect(long.length).toBeLessThanOrEqual(20);
     expect(long.endsWith("…")).toBe(true);
+  });
+});
+
+describe("v2 helpers", () => {
+  const property: Property = {
+    id: 1,
+    name: "Seaview Loft",
+    city: "Penang",
+    facts: [
+      { key: "check_in", label: "Check-in", value: "From 3pm" },
+      { key: "wifi", label: "Wi-Fi", value: "Network X" },
+    ],
+  };
+
+  it("marks the facts a draft used", () => {
+    const triage = { ...msg(1, "check_in", false, "2026-11-13T09:00:00").triage };
+    triage.facts_used = [{ key: "wifi", label: "Wi-Fi" }];
+    expect(factSheet(property, triage).map((f) => [f.key, f.used])).toEqual([
+      ["check_in", false],
+      ["wifi", true],
+    ]);
+    expect(factSheet(undefined, triage)).toEqual([]);
+  });
+
+  it("labels confidence and counts the needs-host filter", () => {
+    const sure = msg(1, "check_in", false, "2026-11-13T09:00:00");
+    sure.triage.confidence = "high";
+    const unsure = msg(2, "general_question", false, "2026-11-13T09:00:00");
+    unsure.triage.confidence = "low";
+    unsure.triage.needs_host = true;
+    expect(confidenceLabel(sure.triage)).toBe("High confidence");
+    expect(confidenceLabel(unsure.triage)).toBe("Needs host");
+    expect(countByFilter([sure, unsure]).needs_host).toBe(1);
+    expect(filterMessages([sure, unsure], "needs_host").map((m) => m.id)).toEqual([2]);
   });
 });

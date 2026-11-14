@@ -2,7 +2,7 @@
 
 import re
 
-from .base import TriageInput, TriageResult, first_name
+from .base import FACT_LABELS, TriageInput, TriageResult, first_name, language_label
 
 # Keyword -> weight, per category. Phrases are matched on word boundaries.
 KEYWORDS: dict[str, dict[str, int]] = {
@@ -193,12 +193,140 @@ def urgent_signals(text: str) -> list[str]:
     return [p for p in URGENT_KEYWORDS if _matches(lowered, p)]
 
 
+# Words that mark a message as Malay or French (several must match). Chinese is spotted by script.
+LANGUAGE_WORDS: dict[str, tuple[str, ...]] = {
+    "ms": (
+        "boleh",
+        "tak",
+        "tidak",
+        "saya",
+        "kami",
+        "terima kasih",
+        "tolong",
+        "sejak",
+        "esok",
+        "pukul",
+        "bilik",
+        "daftar masuk",
+        "keluar",
+        "salam",
+        "ada",
+        "dengan",
+        "kenapa",
+        "paip",
+        "rumah",
+        "pagi",
+        "malam",
+        "nak",
+        "ke",
+        "di",
+    ),
+    "fr": (
+        "bonjour",
+        "merci",
+        "nous",
+        "vous",
+        "est-ce",
+        "il y a",
+        "y a-t-il",
+        "sur place",
+        "arrivons",
+        "votre",
+        "pour",
+        "avec",
+        "une",
+        "le",
+        "la",
+        "les",
+        "est",
+        "pas",
+        "chambre",
+        "voiture",
+        "s'il",
+    ),
+}
+
+
+def detect_language(text: str) -> str:
+    """Best-effort language code from simple word lists. English when unsure."""
+    if re.search(r"[\u4e00-\u9fff]", text):
+        return "zh"
+    lowered = text.lower().replace("\u2019", "'")
+    best, best_hits = "en", 1
+    for code, words in LANGUAGE_WORDS.items():
+        hits = sum(1 for w in words if _matches(lowered, w))
+        if hits > best_hits:
+            best, best_hits = code, hits
+    return best
+
+
+# Phrases that point at a fact on the property's sheet.
+FACT_TRIGGERS: dict[str, tuple[str, ...]] = {
+    "wifi": ("wifi", "wi-fi", "internet", "router", "password"),
+    "parking": ("park", "parking", "car park", "carpark"),
+    "check_in": (
+        "check in",
+        "check-in",
+        "checkin",
+        "arrive",
+        "arriving",
+        "arrival",
+        "early check",
+        "self check-in",
+        "self check in",
+    ),
+    "check_out": ("check out", "check-out", "checkout", "late check"),
+    "pets": ("pet", "pets", "dog", "cat"),
+    "house_rules": ("smoking", "smoke inside", "party", "parties", "quiet hours", "noisy", "noise"),
+    "cancellation": ("cancel", "cancellation", "refund policy"),
+    "max_guests": ("one more guest", "extra guest", "add a guest", "how many guests", "sleeps"),
+    "utilities": (
+        "leak",
+        "leaking",
+        "no water",
+        "flooding",
+        "power cut",
+        "no electricity",
+        "no power",
+        "tripped",
+        "fuse",
+        "gas",
+    ),
+    "nearby": ("breakfast", "restaurant", "where to eat", "food nearby", "recommend"),
+}
+
+
+def matching_facts(text: str, facts: dict[str, str]) -> list[str]:
+    """Keys of the property facts that this message asks about, in sheet order."""
+    lowered = text.lower().replace("\u2019", "'")
+    return [
+        key
+        for key in FACT_LABELS
+        if key in facts and any(_matches(lowered, p) for p in FACT_TRIGGERS.get(key, ()))
+    ]
+
+
+def _facts_sentence(keys: list[str], facts: dict[str, str]) -> str:
+    return " ".join(f"{FACT_LABELS[k]}: {facts[k].rstrip('.')}." for k in keys)
+
+
+ANSWER_TEMPLATE = (
+    "Hi {name}, thanks for your message! {facts} Just reply here if you need anything else."
+)
+CHECK_TEMPLATE = (
+    "Hi {name}, thanks for your message! I don't want to guess on this one, so I'll check "
+    "with the team and get back to you shortly."
+)
+
+
 class OfflineTriager:
     name = "offline"
 
     def triage(self, item: TriageInput) -> TriageResult:
+        language = detect_language(item.body)
         category, hits = classify(item.body)
         signals = urgent_signals(item.body)
+        used = matching_facts(item.body, item.facts)
         if hits:
             reason = "Matched: " + ", ".join(f'"{h}"' for h in hits[:3])
         else:
@@ -206,13 +334,39 @@ class OfflineTriager:
         if signals:
             reason += " Urgent: " + ", ".join(f'"{s}"' for s in signals[:3]) + "."
         name = first_name(item.guest_name)
-        draft = TEMPLATES[category].format(name=name, prop=item.property_name)
-        if signals:
-            draft = draft.replace(f"Hi {name}, ", f"Hi {name}, " + URGENT_PREFIX, 1)
+
+        if used and not signals and category in ("check_in", "booking_change", "general_question"):
+            # The fact sheet answers the question directly.
+            draft = ANSWER_TEMPLATE.format(name=name, facts=_facts_sentence(used, item.facts))
+        elif not hits and not signals:
+            draft = CHECK_TEMPLATE.format(name=name)
+        else:
+            draft = TEMPLATES[category].format(name=name, prop=item.property_name)
+            if signals:
+                draft = draft.replace(f"Hi {name}, ", f"Hi {name}, " + URGENT_PREFIX, 1)
+            if used:
+                draft += " Useful details: " + _facts_sentence(used, item.facts)
+
+        if language != "en":
+            # The rules cannot translate: say so instead of pretending (D5).
+            reason += (
+                f" Detected: {language_label(language)}. Live AI replies in the guest's language."
+            )
+            confidence = "low"
+        elif used:
+            confidence = "high"
+        elif hits or signals:
+            confidence = "medium"
+        else:
+            confidence = "low"
+
         return TriageResult(
             category=category,
             urgent=bool(signals),
             reason=reason,
             draft_reply=draft,
             triaged_by=self.name,
+            language=language,
+            confidence=confidence,
+            facts_used=tuple(used),
         )

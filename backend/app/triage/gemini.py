@@ -4,7 +4,7 @@ import json
 
 import httpx
 
-from .base import CATEGORIES, TriageError, TriageInput, TriageResult
+from .base import CATEGORIES, CONFIDENCE_LEVELS, TriageError, TriageInput, TriageResult
 
 API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
@@ -17,15 +17,31 @@ Classify the guest message into exactly one category:
 - general_question: anything else (recommendations, house rules, thanks)
 Set urgent=true only if the guest needs action within the hour: locked out, no water or power,
 safety risk (smoke, gas, flooding, injury), or stranded at arrival.
-Write "reason" as one short sentence.
-Write "draft_reply" as the operator: warm, short (2-4 sentences), concrete next step,
-first name only, no promises of refunds or compensation. Never invent door codes or addresses.
+Write "reason" in English as one short sentence.
+Set "language" to the ISO 639-1 code of the guest's message (e.g. en, ms, zh, fr).
+Write "draft_reply" as the operator, in the SAME language as the guest's message: warm, short
+(2-4 sentences), concrete next step, first name only, no promises of refunds or compensation.
+Use ONLY the property facts below for property details (times, Wi-Fi, parking, rules, fees,
+contacts). Never invent door codes, addresses, prices or facts. If the facts do not answer the
+question, say you will check and get back to them, and set confidence to "low".
+List in "facts_used" the keys of the facts your draft relies on (empty if none).
+Set "confidence": "high" if the facts fully answer it, "medium" if the reply is a safe next step
+without needing facts, "low" if a person should check before replying.
 Do not sign off with a name or signature: the operator adds their own.
 
 Guest name: {guest}
 Property: {prop}
+Property facts:
+{facts}
 Message:
 \"\"\"{body}\"\"\""""
+
+
+def format_facts(facts: dict[str, str]) -> str:
+    if not facts:
+        return "- (none: say you will check any property details)"
+    return "\n".join(f"- {key}: {value}" for key, value in facts.items())
+
 
 RESPONSE_SCHEMA = {
     "type": "OBJECT",
@@ -34,8 +50,19 @@ RESPONSE_SCHEMA = {
         "urgent": {"type": "BOOLEAN"},
         "reason": {"type": "STRING"},
         "draft_reply": {"type": "STRING"},
+        "language": {"type": "STRING"},
+        "confidence": {"type": "STRING", "enum": list(CONFIDENCE_LEVELS)},
+        "facts_used": {"type": "ARRAY", "items": {"type": "STRING"}},
     },
-    "required": ["category", "urgent", "reason", "draft_reply"],
+    "required": [
+        "category",
+        "urgent",
+        "reason",
+        "draft_reply",
+        "language",
+        "confidence",
+        "facts_used",
+    ],
 }
 
 
@@ -62,6 +89,13 @@ def parse_response(payload: dict) -> dict:
     for key in ("reason", "draft_reply"):
         if not isinstance(data.get(key), str) or not data[key].strip():
             raise TriageError(f"missing {key}")
+    # Softer fields: fall back to safe values instead of failing the whole result.
+    language = str(data.get("language") or "en").strip().lower()[:8]
+    data["language"] = language if language.isalpha() else "en"
+    if data.get("confidence") not in CONFIDENCE_LEVELS:
+        data["confidence"] = "low"
+    used = data.get("facts_used")
+    data["facts_used"] = [k for k in used if isinstance(k, str)] if isinstance(used, list) else []
     return data
 
 
@@ -89,7 +123,10 @@ class GeminiTriager:
                     "parts": [
                         {
                             "text": PROMPT.format(
-                                guest=item.guest_name, prop=item.property_name, body=item.body
+                                guest=item.guest_name,
+                                prop=item.property_name,
+                                facts=format_facts(item.facts),
+                                body=item.body,
                             )
                         }
                     ]
@@ -122,4 +159,8 @@ class GeminiTriager:
             reason=data["reason"].strip(),
             draft_reply=data["draft_reply"].strip(),
             triaged_by=self.name,
+            language=data["language"],
+            confidence=data["confidence"],
+            # Only facts that exist on this property's sheet count as used.
+            facts_used=tuple(dict.fromkeys(k for k in data["facts_used"] if k in item.facts)),
         )

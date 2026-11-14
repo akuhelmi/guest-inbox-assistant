@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { preview, timeAgo } from "./lib/inbox";
-import type { Message, Triage } from "./types";
+import { confidenceLabel, factSheet, preview, timeAgo } from "./lib/inbox";
+import type { Message, Property, Triage } from "./types";
 
 export function CategoryChip({ triage }: { triage: Triage }) {
   return <span className={`chip chip-${triage.category}`}>{triage.category_label}</span>;
@@ -8,6 +8,41 @@ export function CategoryChip({ triage }: { triage: Triage }) {
 
 export function UrgentBadge() {
   return <span className="badge-urgent">Urgent</span>;
+}
+
+export function ConfidenceBadge({ triage }: { triage: Triage }) {
+  return (
+    <span className={`badge-conf badge-conf-${triage.needs_host ? "low" : triage.confidence}`}>
+      {confidenceLabel(triage)}
+    </span>
+  );
+}
+
+export function LanguageBadge({ triage }: { triage: Triage }) {
+  if (triage.language === "en") return null;
+  return <span className="tag tag-lang">{triage.language_label}</span>;
+}
+
+/** The property's fact sheet: the only details a draft may use. Used facts are highlighted. */
+export function FactSheet({ property, triage }: { property?: Property; triage?: Triage }) {
+  const facts = factSheet(property, triage);
+  if (!property || facts.length === 0) return null;
+  return (
+    <details className="facts">
+      <summary>
+        Property facts · {property.name}
+        <span className="muted small"> (the only details the AI may use)</span>
+      </summary>
+      <dl>
+        {facts.map((f) => (
+          <div key={f.key} className={f.used ? "fact fact-used" : "fact"}>
+            <dt>{f.label}</dt>
+            <dd>{f.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </details>
+  );
 }
 
 export function MessageRow({
@@ -34,6 +69,8 @@ export function MessageRow({
         <div className="row-meta">
           {message.triage.urgent && <UrgentBadge />}
           <CategoryChip triage={message.triage} />
+          {message.triage.needs_host && <ConfidenceBadge triage={message.triage} />}
+          <LanguageBadge triage={message.triage} />
           <span className="muted">{message.property_name}</span>
         </div>
         <p className="row-preview">{preview(message.body)}</p>
@@ -81,10 +118,32 @@ export function TriagePanel({
       <div className="row-meta">
         {triage.urgent && <UrgentBadge />}
         <CategoryChip triage={triage} />
+        <ConfidenceBadge triage={triage} />
+        <LanguageBadge triage={triage} />
       </div>
       <p className="reason">{triage.reason}</p>
+      <p className="based-on small">
+        {triage.facts_used.length > 0 ? (
+          <>
+            Based on:{" "}
+            {triage.facts_used.map((f) => (
+              <span key={f.key} className="fact-chip">
+                {f.label}
+              </span>
+            ))}
+          </>
+        ) : (
+          <span className="muted">Uses no property facts.</span>
+        )}
+      </p>
+      {triage.needs_host && (
+        <p className="needs-host small">
+          Not sure enough to answer on its own: please check before replying.
+        </p>
+      )}
       <label className="label" htmlFor={draftId}>
-        Draft reply (edit before sending)
+        Draft reply{triage.language !== "en" ? ` in ${triage.language_label}` : ""} (edit before
+        sending)
       </label>
       <textarea
         id={draftId}

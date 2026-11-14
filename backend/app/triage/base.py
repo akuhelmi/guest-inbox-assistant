@@ -1,6 +1,6 @@
 """Shared types for every triage provider."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 CATEGORIES: tuple[str, ...] = (
@@ -20,11 +20,48 @@ CATEGORY_LABELS: dict[str, str] = {
 }
 
 
+CONFIDENCE_LEVELS: tuple[str, ...] = ("high", "medium", "low")
+
+# Property fact sheet keys, in display order. Drafts may only use facts from this sheet.
+FACT_LABELS: dict[str, str] = {
+    "check_in": "Check-in",
+    "check_out": "Check-out",
+    "wifi": "Wi-Fi",
+    "parking": "Parking",
+    "house_rules": "House rules",
+    "pets": "Pets",
+    "max_guests": "Guests",
+    "cancellation": "Cancellation",
+    "utilities": "Utilities",
+    "caretaker": "Caretaker",
+    "nearby": "Nearby",
+}
+
+LANGUAGE_LABELS: dict[str, str] = {
+    "en": "English",
+    "ms": "Malay",
+    "zh": "Chinese",
+    "fr": "French",
+    "es": "Spanish",
+    "de": "German",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "id": "Indonesian",
+    "ar": "Arabic",
+    "th": "Thai",
+}
+
+
+def language_label(code: str) -> str:
+    return LANGUAGE_LABELS.get(code, code.upper() or "Unknown")
+
+
 @dataclass(frozen=True)
 class TriageInput:
     body: str
     guest_name: str = "there"
     property_name: str = "our property"
+    facts: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -34,6 +71,9 @@ class TriageResult:
     reason: str
     draft_reply: str
     triaged_by: str
+    language: str = "en"
+    confidence: str = "medium"
+    facts_used: tuple[str, ...] = ()
 
 
 class TriageError(Exception):

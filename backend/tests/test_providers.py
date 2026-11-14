@@ -123,3 +123,43 @@ def test_default_database_url(monkeypatch):
     assert load_settings().database_url == "sqlite:////tmp/guest_inbox.db"
     monkeypatch.setenv("DATABASE_URL", "postgres://u:p@h/db")
     assert load_settings().database_url == "postgresql+psycopg://u:p@h/db"
+
+
+def test_prompt_sends_the_property_facts_and_language_rule():
+    client, seen = mock_client(200, gemini_payload(GOOD))
+    facts = {"wifi": "Network X, password abc123"}
+    GeminiTriager("k", "m", client=client).triage(TriageInput("wifi?", "Ana", "Seaview", facts))
+    text = json.loads(seen[0].content)["contents"][0]["parts"][0]["text"]
+    assert "- wifi: Network X, password abc123" in text
+    assert "SAME language" in text
+    assert "Never invent" in text
+
+
+def test_gemini_result_keeps_language_confidence_and_only_known_facts():
+    data = {**GOOD, "language": "FR", "confidence": "high", "facts_used": ["wifi", "pool", "wifi"]}
+    client, _ = mock_client(200, gemini_payload(data))
+    result = GeminiTriager("k", "m", client=client).triage(
+        TriageInput("Le wifi?", "Ana", "Seaview", {"wifi": "abc"})
+    )
+    assert result.language == "fr"
+    assert result.confidence == "high"
+    assert result.facts_used == ("wifi",)
+
+
+def test_parse_response_softens_missing_new_fields():
+    data = parse_response(gemini_payload(GOOD))
+    assert data["language"] == "en"
+    assert data["confidence"] == "low"
+    assert data["facts_used"] == []
+
+
+def test_fallback_keeps_offline_language_and_confidence():
+    class Broken:
+        name = "gemini"
+
+        def triage(self, item):
+            raise TriageError("quota")
+
+    result = FallbackTriager(Broken()).triage(TriageInput("Bonjour, merci pour la chambre", "Ana"))
+    assert result.triaged_by == "offline (fallback)"
+    assert result.language == "fr" and result.confidence == "low"

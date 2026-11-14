@@ -15,7 +15,10 @@ never sends anything itself.
 | **Sort** | Each message gets one category: check-in, complaint, maintenance, booking change or general question. |
 | **Flag** | Messages that need action within the hour (locked out, no water or power, gas, flooding) are marked urgent and listed first. |
 | **Draft** | A short, warm reply with a concrete next step, ready to edit and copy. |
-| **Try it** | Paste any guest message and see it sorted and answered live (rate-limited, never stored). |
+| **Facts, not guesses** | Each property has a fact sheet (check-in, Wi-Fi, parking, rules, contacts). Drafts use only those facts and show which ones they used; anything not on the sheet gets "I'll check" instead of an invented answer. |
+| **Confidence** | Every draft says how sure it is. Low confidence is marked **Needs host**, so a person checks before replying. |
+| **Guest's language** | The live AI replies in the language the guest wrote in (the inbox includes Malay, Chinese and French examples). |
+| **Try it** | Pick a property, paste any guest message and see it sorted and answered live from that property's facts (rate-limited, never stored). |
 
 ## Architecture
 
@@ -35,6 +38,12 @@ never sends anything itself.
   one new class.
 - **Saved triage:** the seeded inbox stores its triage results, so the page loads instantly
   without spending LLM quota. "Re-run live" calls the provider on demand.
+- **Offline rules stay honest:** without the AI they still pick facts from the sheet, spot
+  Malay, Chinese or French, and say so ("Live AI replies in the guest's language") instead of
+  pretending to translate. Those drafts are marked Needs host.
+- **Self-upgrading demo data:** a data version is stored in the database. When a deploy brings a
+  newer one, the demo tables are rebuilt and reseeded on the first request (all data is fake);
+  the rate-limit counters are kept. No manual migrations.
 - **Guards on the public box:** 1,000-character cap and 10 live runs per visitor per hour,
   counted in the database (salted hash, never the raw IP). Pasted text is not stored.
 

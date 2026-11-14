@@ -1,9 +1,20 @@
 """Switchable triage layer: pick a provider with LLM_PROVIDER, fall back to offline rules."""
 
 import logging
+from dataclasses import replace
 
 from ..config import Settings
-from .base import CATEGORIES, CATEGORY_LABELS, TriageError, TriageInput, Triager, TriageResult
+from .base import (
+    CATEGORIES,
+    CATEGORY_LABELS,
+    CONFIDENCE_LEVELS,
+    FACT_LABELS,
+    TriageError,
+    TriageInput,
+    Triager,
+    TriageResult,
+    language_label,
+)
 from .gemini import GeminiTriager
 from .offline import OfflineTriager
 
@@ -12,12 +23,15 @@ log = logging.getLogger(__name__)
 __all__ = [
     "CATEGORIES",
     "CATEGORY_LABELS",
+    "CONFIDENCE_LEVELS",
+    "FACT_LABELS",
     "FallbackTriager",
     "TriageError",
     "TriageInput",
     "TriageResult",
     "Triager",
     "build_triager",
+    "language_label",
 ]
 
 
@@ -35,13 +49,7 @@ class FallbackTriager:
         except TriageError as exc:
             log.warning("triage provider %s failed, using offline rules: %s", self.name, exc)
             result = self.fallback.triage(item)
-            return TriageResult(
-                category=result.category,
-                urgent=result.urgent,
-                reason=result.reason,
-                draft_reply=result.draft_reply,
-                triaged_by=f"{self.fallback.name} (fallback)",
-            )
+            return replace(result, triaged_by=f"{self.fallback.name} (fallback)")
 
 
 def build_triager(settings: Settings) -> Triager:
