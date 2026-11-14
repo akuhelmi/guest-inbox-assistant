@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { confidenceLabel, factSheet, preview, timeAgo } from "./lib/inbox";
 import type { Message, Property, Triage } from "./types";
 
@@ -49,10 +49,13 @@ export function MessageRow({
   message,
   selected,
   onSelect,
+  extra,
 }: {
   message: Message;
   selected: boolean;
   onSelect: () => void;
+  /** Extra line under the meta row (status, reply time). */
+  extra?: ReactNode;
 }) {
   return (
     <li>
@@ -74,6 +77,7 @@ export function MessageRow({
           <span className="muted">{message.property_name}</span>
         </div>
         <p className="row-preview">{preview(message.body)}</p>
+        {extra && <div className="row-meta">{extra}</div>}
       </button>
     </li>
   );
@@ -142,8 +146,8 @@ export function TriagePanel({
         </p>
       )}
       <label className="label" htmlFor={draftId}>
-        Draft reply{triage.language !== "en" ? ` in ${triage.language_label}` : ""} (edit before
-        sending)
+        Draft reply
+        {triage.language !== "en" ? ` in ${triage.language_label}` : ""} (edit before sending)
       </label>
       <textarea
         id={draftId}

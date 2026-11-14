@@ -22,6 +22,12 @@ CATEGORY_LABELS: dict[str, str] = {
 
 CONFIDENCE_LEVELS: tuple[str, ...] = ("high", "medium", "low")
 
+TASK_ASSIGNEES: dict[str, str] = {
+    "host": "Host",
+    "cleaner": "Cleaner",
+    "maintenance": "Maintenance",
+}
+
 # Property fact sheet keys, in display order. Drafts may only use facts from this sheet.
 FACT_LABELS: dict[str, str] = {
     "check_in": "Check-in",
@@ -74,6 +80,10 @@ class TriageResult:
     language: str = "en"
     confidence: str = "medium"
     facts_used: tuple[str, ...] = ()
+    # Suggested task for the team (empty title = no task). The host confirms it (D8).
+    task_title: str = ""
+    task_assignee: str = ""
+    task_due_minutes: int = 0
 
 
 class TriageError(Exception):

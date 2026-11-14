@@ -127,3 +127,39 @@ def test_maintenance_draft_adds_useful_facts_but_keeps_the_urgent_promise():
     assert result.urgent
     assert "15 minutes" in result.draft_reply
     assert "Fuse box behind the front door" in result.draft_reply
+
+
+def test_seed_tasks_have_a_known_assignee_and_due_time():
+    from app.triage.base import TASK_ASSIGNEES
+
+    tasks = [m["task"] for m in MESSAGES if "task" in m]
+    assert len(tasks) >= 10
+    for t in tasks:
+        assert t["title"] and t["assignee"] in TASK_ASSIGNEES and t["due_minutes"] > 0
+
+
+@pytest.mark.parametrize(
+    "text, assignee",
+    [
+        ("The fridge is broken.", "maintenance"),
+        ("The room was dirty and smelled.", "cleaner"),
+        ("The host was rude, I want a refund.", "host"),
+        ("We're locked out!", "host"),
+        ("Can we extend by another night?", "host"),
+    ],
+)
+def test_offline_suggests_a_task_for_the_right_person(text, assignee):
+    result = triager.triage(TriageInput(text, "Ana"))
+    assert result.task_assignee == assignee and result.task_title
+    assert result.task_due_minutes > 0
+
+
+def test_no_task_for_a_simple_question():
+    result = triager.triage(TriageInput("Do you have a hairdryer?", "Ana"))
+    assert (result.task_title, result.task_assignee, result.task_due_minutes) == ("", "", 0)
+
+
+def test_urgent_tasks_are_due_sooner():
+    calm = triager.triage(TriageInput("The aircon stopped working.", "Ana"))
+    urgent = triager.triage(TriageInput("Gas smell and the stove is broken!", "Ana"))
+    assert urgent.task_due_minutes < calm.task_due_minutes

@@ -16,6 +16,13 @@ class FactRef(BaseModel):
     label: str
 
 
+class TaskSuggestion(BaseModel):
+    title: str
+    assignee: str
+    assignee_label: str
+    due_minutes: int
+
+
 class TriageOut(BaseModel):
     category: str
     category_label: str
@@ -28,6 +35,7 @@ class TriageOut(BaseModel):
     confidence: str
     needs_host: bool
     facts_used: list[FactRef]
+    suggested_task: TaskSuggestion | None = None
 
 
 class PropertyOut(BaseModel):
@@ -46,6 +54,8 @@ class MessageOut(BaseModel):
     received_at: datetime
     body: str
     triage: TriageOut
+    status: str = "new"
+    replied_at: datetime | None = None
 
 
 class TriageRequest(BaseModel):

@@ -163,3 +163,16 @@ def test_fallback_keeps_offline_language_and_confidence():
     result = FallbackTriager(Broken()).triage(TriageInput("Bonjour, merci pour la chambre", "Ana"))
     assert result.triaged_by == "offline (fallback)"
     assert result.language == "fr" and result.confidence == "low"
+
+
+def test_gemini_task_is_checked():
+    good = {**GOOD, "task_title": "Plumber", "task_assignee": "maintenance", "task_due_minutes": 2}
+    data = parse_response(gemini_payload(good))
+    assert (data["task_title"], data["task_assignee"], data["task_due_minutes"]) == (
+        "Plumber",
+        "maintenance",
+        5,
+    )
+    none = parse_response(gemini_payload({**GOOD, "task_title": "x", "task_assignee": "none"}))
+    assert (none["task_title"], none["task_assignee"], none["task_due_minutes"]) == ("", "", 0)
+    assert "suggest ONE task" in PROMPT

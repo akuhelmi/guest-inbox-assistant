@@ -18,6 +18,9 @@ never sends anything itself.
 | **Facts, not guesses** | Each property has a fact sheet (check-in, Wi-Fi, parking, rules, contacts). Drafts use only those facts and show which ones they used; anything not on the sheet gets "I'll check" instead of an invented answer. |
 | **Confidence** | Every draft says how sure it is. Low confidence is marked **Needs host**, so a person checks before replying. |
 | **Guest's language** | The live AI replies in the language the guest wrote in (the inbox includes Malay, Chinese and French examples). |
+| **Status** | Each message is New, Replied or Done, with a filter for each. |
+| **Tasks** | For repairs, cleaning, calls or booking updates the AI suggests one task (what, who, by when). The host edits it if needed and creates it in one click; the Tasks view lists them, soonest due first. |
+| **Reply time** | Every message shows how long the guest has waited. Urgent messages are overdue after 15 minutes, others after an hour. |
 | **Try it** | Pick a property, paste any guest message and see it sorted and answered live from that property's facts (rate-limited, never stored). |
 
 ## Architecture
@@ -41,6 +44,10 @@ never sends anything itself.
 - **Offline rules stay honest:** without the AI they still pick facts from the sheet, spot
   Malay, Chinese or French, and say so ("Live AI replies in the guest's language") instead of
   pretending to translate. Those drafts are marked Needs host.
+- **Your clicks stay in your browser:** statuses and tasks are saved in `localStorage`, so every
+  visitor starts from the same inbox and nobody changes it for others. "Reset demo" clears them.
+- **Ages stay fresh:** the saved examples keep their seeded age ("6 min ago") however long ago
+  the data was loaded, so reply times on the live demo stay meaningful.
 - **Self-upgrading demo data:** a data version is stored in the database. When a deploy brings a
   newer one, the demo tables are rebuilt and reseeded on the first request (all data is fake);
   the rate-limit counters are kept. No manual migrations.

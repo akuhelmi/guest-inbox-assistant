@@ -75,6 +75,11 @@ MESSAGES: list[dict] = [
     {
         "property": "skyline",
         "guest": "Daniel Weber",
+        "task": {
+            "title": "Call the guest and send the backup lockbox code",
+            "assignee": "host",
+            "due_minutes": 5,
+        },
         "facts_used": ["check_in", "caretaker"],
         "confidence": "high",
         "minutes_ago": 6,
@@ -90,6 +95,11 @@ MESSAGES: list[dict] = [
     {
         "property": "seaview",
         "guest": "Priya Nair",
+        "task": {
+            "title": "Plumber: ceiling leak in the bathroom",
+            "assignee": "maintenance",
+            "due_minutes": 30,
+        },
         "facts_used": ["utilities", "caretaker"],
         "confidence": "high",
         "minutes_ago": 14,
@@ -119,6 +129,11 @@ MESSAGES: list[dict] = [
     {
         "property": "kampung",
         "guest": "Mei Ling Tan",
+        "task": {
+            "title": "Send the extension request for Saturday night",
+            "assignee": "host",
+            "due_minutes": 120,
+        },
         "facts_used": [],
         "confidence": "medium",
         "minutes_ago": 47,
@@ -134,6 +149,11 @@ MESSAGES: list[dict] = [
     {
         "property": "skyline",
         "guest": "Ahmad Faris",
+        "task": {
+            "title": "Change the linen and deep-clean the bathroom",
+            "assignee": "cleaner",
+            "due_minutes": 180,
+        },
         "facts_used": [],
         "confidence": "medium",
         "minutes_ago": 63,
@@ -149,6 +169,11 @@ MESSAGES: list[dict] = [
     {
         "property": "seaview",
         "guest": "Sophie Martin",
+        "task": {
+            "title": "Technician: bedroom aircon blinking red",
+            "assignee": "maintenance",
+            "due_minutes": 240,
+        },
         "facts_used": [],
         "confidence": "medium",
         "minutes_ago": 88,
@@ -206,6 +231,11 @@ MESSAGES: list[dict] = [
     {
         "property": "seaview",
         "guest": "Oliver Brown",
+        "task": {
+            "title": "Gas check: smell at the stove",
+            "assignee": "maintenance",
+            "due_minutes": 30,
+        },
         "facts_used": ["utilities"],
         "confidence": "high",
         "minutes_ago": 240,
@@ -220,6 +250,11 @@ MESSAGES: list[dict] = [
     {
         "property": "garden",
         "guest": "Aisha Rahman",
+        "task": {
+            "title": "Talk to the neighbours about quiet hours",
+            "assignee": "host",
+            "due_minutes": 480,
+        },
         "facts_used": ["house_rules"],
         "confidence": "medium",
         "minutes_ago": 300,
@@ -235,6 +270,11 @@ MESSAGES: list[dict] = [
     {
         "property": "kampung",
         "guest": "Kenji Sato",
+        "task": {
+            "title": "Add one guest from Friday to the booking",
+            "assignee": "host",
+            "due_minutes": 240,
+        },
         "facts_used": ["max_guests"],
         "confidence": "high",
         "minutes_ago": 360,
@@ -249,6 +289,11 @@ MESSAGES: list[dict] = [
     {
         "property": "skyline",
         "guest": "Emma Wilson",
+        "task": {
+            "title": "Check the router; bring a mobile hotspot",
+            "assignee": "maintenance",
+            "due_minutes": 60,
+        },
         "facts_used": ["wifi"],
         "confidence": "medium",
         "minutes_ago": 420,
@@ -302,6 +347,11 @@ MESSAGES: list[dict] = [
     {
         "property": "skyline",
         "guest": "Nur Aina",
+        "task": {
+            "title": "Handyman: blocked toilet",
+            "assignee": "maintenance",
+            "due_minutes": 120,
+        },
         "facts_used": [],
         "confidence": "medium",
         "minutes_ago": 850,
@@ -315,6 +365,11 @@ MESSAGES: list[dict] = [
     {
         "property": "seaview",
         "guest": "James Taylor",
+        "task": {
+            "title": "Pest control, then deep-clean the kitchen",
+            "assignee": "cleaner",
+            "due_minutes": 240,
+        },
         "facts_used": [],
         "confidence": "medium",
         "minutes_ago": 1000,
@@ -341,6 +396,11 @@ MESSAGES: list[dict] = [
     {
         "property": "kampung",
         "guest": "Ben Carter",
+        "task": {
+            "title": "Caretaker: power cut, check the fuse box",
+            "assignee": "maintenance",
+            "due_minutes": 20,
+        },
         "facts_used": ["utilities", "caretaker"],
         "confidence": "high",
         "minutes_ago": 1400,
@@ -355,6 +415,11 @@ MESSAGES: list[dict] = [
     {
         "property": "skyline",
         "guest": "Grace Okafor",
+        "task": {
+            "title": "Ask building management about pool heating and BBQ",
+            "assignee": "host",
+            "due_minutes": 60,
+        },
         "minutes_ago": 22,
         "body": "Is the rooftop pool heated? And can we use the BBQ pits up there tonight?",
         "category": "general_question",
@@ -369,6 +434,11 @@ MESSAGES: list[dict] = [
     {
         "property": "skyline",
         "guest": "Hafiz Rahim",
+        "task": {
+            "title": "Caretaker: no water supply since morning",
+            "assignee": "maintenance",
+            "due_minutes": 15,
+        },
         "minutes_ago": 9,
         "language": "ms",
         "body": "Tolong! Air tak keluar langsung dari paip sejak pagi. Kami tak boleh mandi.",

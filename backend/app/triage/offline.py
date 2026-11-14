@@ -319,6 +319,39 @@ CHECK_TEMPLATE = (
 )
 
 
+CLEANING_WORDS = (
+    "dirty",
+    "not clean",
+    "smell",
+    "smells",
+    "stain",
+    "stains",
+    "cockroach",
+    "cockroaches",
+    "bugs",
+)
+
+
+def suggest_task(category: str, hits: list[str], urgent: bool) -> tuple[str, str, int]:
+    """(title, assignee, due in minutes) for the team, or ("", "", 0) when nothing to do."""
+    topic = ", ".join(hits[:2])
+    if category == "maintenance":
+        return (f"Maintenance: {topic or 'check the issue'}", "maintenance", 30 if urgent else 240)
+    if category == "complaint":
+        if any(h in CLEANING_WORDS for h in hits):
+            return (f"Cleaning: {topic}", "cleaner", 60 if urgent else 180)
+        return (
+            f"Follow up on complaint: {topic or 'call the guest'}",
+            "host",
+            60 if urgent else 240,
+        )
+    if urgent:
+        return ("Call the guest now", "host", 10)
+    if category == "booking_change":
+        return ("Check availability and update the booking", "host", 240)
+    return ("", "", 0)
+
+
 class OfflineTriager:
     name = "offline"
 
@@ -360,6 +393,7 @@ class OfflineTriager:
         else:
             confidence = "low"
 
+        title, assignee, due = suggest_task(category, hits, bool(signals))
         return TriageResult(
             category=category,
             urgent=bool(signals),
@@ -369,4 +403,7 @@ class OfflineTriager:
             language=language,
             confidence=confidence,
             facts_used=tuple(used),
+            task_title=title,
+            task_assignee=assignee,
+            task_due_minutes=due,
         )

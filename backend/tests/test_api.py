@@ -180,3 +180,48 @@ def test_old_database_is_upgraded_and_rate_counters_are_kept(tmp_path):
     finally:
         Base.metadata.drop_all(app.state.engine)
         app.state.engine.dispose()
+
+
+def test_saved_messages_offer_their_suggested_task(client):
+    msgs = {m["guest_name"]: m for m in client.get("/api/messages").json()}
+    task = msgs["Priya Nair"]["triage"]["suggested_task"]
+    assert task == {
+        "title": "Plumber: ceiling leak in the bathroom",
+        "assignee": "maintenance",
+        "assignee_label": "Maintenance",
+        "due_minutes": 30,
+    }
+    assert msgs["Farid Ismail"]["triage"]["suggested_task"] is None
+
+
+def test_saved_examples_keep_their_age_however_long_ago_they_were_seeded(client):
+    from datetime import timedelta
+
+    from sqlalchemy.orm import Session
+
+    from app.models import AppMeta
+    from app.seed import demo_clock_offset
+
+    first = client.get("/api/messages").json()
+    with Session(client.app.state.engine) as session:
+        row = session.get(AppMeta, "seeded_at")
+        seeded = datetime.fromisoformat(row.value)
+        row.value = (seeded - timedelta(days=3)).isoformat()
+        session.commit()
+        assert demo_clock_offset(session) >= timedelta(days=3)
+    later = {m["id"]: m["received_at"] for m in client.get("/api/messages").json()}
+    for m in first:
+        shift = datetime.fromisoformat(later[m["id"]]) - datetime.fromisoformat(m["received_at"])
+        assert abs(shift - timedelta(days=3)) < timedelta(seconds=5)
+
+
+def test_older_saved_messages_start_replied_or_done(client):
+    msgs = client.get("/api/messages").json()
+    by_status = {s: [m for m in msgs if m["status"] == s] for s in ("new", "replied", "done")}
+    assert all(by_status.values())
+    for m in by_status["new"]:
+        assert m["replied_at"] is None
+    for m in by_status["replied"] + by_status["done"]:
+        received = datetime.fromisoformat(m["received_at"])
+        replied = datetime.fromisoformat(m["replied_at"])
+        assert received < replied

@@ -19,6 +19,8 @@ function msg(id: number, category: Category, urgent: boolean, receivedAt: string
     property_city: "Penang",
     received_at: receivedAt,
     body: "text",
+    status: "new",
+    replied_at: null,
     triage: {
       category,
       category_label: category,
@@ -31,6 +33,7 @@ function msg(id: number, category: Category, urgent: boolean, receivedAt: string
       confidence: "medium",
       needs_host: false,
       facts_used: [],
+      suggested_task: null,
     },
   };
 }

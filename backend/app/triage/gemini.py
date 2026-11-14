@@ -4,7 +4,14 @@ import json
 
 import httpx
 
-from .base import CATEGORIES, CONFIDENCE_LEVELS, TriageError, TriageInput, TriageResult
+from .base import (
+    CATEGORIES,
+    CONFIDENCE_LEVELS,
+    TASK_ASSIGNEES,
+    TriageError,
+    TriageInput,
+    TriageResult,
+)
 
 API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
@@ -28,6 +35,10 @@ List in "facts_used" the keys of the facts your draft relies on (empty if none).
 Set "confidence": "high" if the facts fully answer it, "medium" if the reply is a safe next step
 without needing facts, "low" if a person should check before replying.
 Do not sign off with a name or signature: the operator adds their own.
+If the team must do something (repair, cleaning, a call, a booking update), suggest ONE task:
+"task_title" (short, English), "task_assignee" (cleaner, maintenance or host) and
+"task_due_minutes" (how soon it should be done). Otherwise set task_title to "" and
+task_assignee to "none".
 
 Guest name: {guest}
 Property: {prop}
@@ -53,6 +64,9 @@ RESPONSE_SCHEMA = {
         "language": {"type": "STRING"},
         "confidence": {"type": "STRING", "enum": list(CONFIDENCE_LEVELS)},
         "facts_used": {"type": "ARRAY", "items": {"type": "STRING"}},
+        "task_title": {"type": "STRING"},
+        "task_assignee": {"type": "STRING", "enum": ["none", *TASK_ASSIGNEES]},
+        "task_due_minutes": {"type": "INTEGER"},
     },
     "required": [
         "category",
@@ -62,6 +76,9 @@ RESPONSE_SCHEMA = {
         "language",
         "confidence",
         "facts_used",
+        "task_title",
+        "task_assignee",
+        "task_due_minutes",
     ],
 }
 
@@ -96,6 +113,16 @@ def parse_response(payload: dict) -> dict:
         data["confidence"] = "low"
     used = data.get("facts_used")
     data["facts_used"] = [k for k in used if isinstance(k, str)] if isinstance(used, list) else []
+    title = data.get("task_title")
+    assignee = data.get("task_assignee")
+    due = data.get("task_due_minutes")
+    if isinstance(title, str) and title.strip() and assignee in TASK_ASSIGNEES:
+        data["task_title"] = title.strip()[:120]
+        data["task_due_minutes"] = (
+            min(max(int(due), 5), 7 * 24 * 60) if isinstance(due, int) else 240
+        )
+    else:
+        data["task_title"], data["task_assignee"], data["task_due_minutes"] = "", "", 0
     return data
 
 
@@ -163,4 +190,7 @@ class GeminiTriager:
             confidence=data["confidence"],
             # Only facts that exist on this property's sheet count as used.
             facts_used=tuple(dict.fromkeys(k for k in data["facts_used"] if k in item.facts)),
+            task_title=data["task_title"],
+            task_assignee=data["task_assignee"],
+            task_due_minutes=data["task_due_minutes"],
         )

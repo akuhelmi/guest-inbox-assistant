@@ -39,6 +39,12 @@ class Message(Base):
     language: Mapped[str] = mapped_column(String(8), default="en")
     confidence: Mapped[str] = mapped_column(String(8), default="medium")
     facts_used: Mapped[list] = mapped_column(JSON, default=list)
+    task_title: Mapped[str] = mapped_column(String(120), default="")
+    task_assignee: Mapped[str] = mapped_column(String(16), default="")
+    task_due_minutes: Mapped[int] = mapped_column(Integer, default=0)
+    # Starting status for the demo (each visitor's own changes stay in their browser).
+    status: Mapped[str] = mapped_column(String(16), default="new")
+    replied_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
 
     property: Mapped[Property] = relationship(back_populates="messages")
 

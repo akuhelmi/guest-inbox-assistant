@@ -8,7 +8,12 @@
   --brand-soft: #ccfbf1;
   --urgent: #b91c1c;
   --urgent-soft: #fee2e2;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
   color: var(--text);
   background: var(--bg);
   line-height: 1.45;
@@ -469,4 +474,249 @@ h3 {
 
 .fact-used {
   background: #e0f2fe;
+}
+
+/* v2: status, reply time, tasks */
+.tabs {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 20px 0 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tab {
+  font: inherit;
+  font-weight: 600;
+  color: #64748b;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 10px 16px;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--brand);
+}
+
+.tab-on {
+  color: var(--brand);
+  border-bottom-color: var(--brand);
+}
+
+.tab-badge {
+  display: inline-block;
+  min-width: 20px;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.tab-on .tab-badge {
+  background: var(--brand);
+  color: #fff;
+}
+
+.tabs .link {
+  margin-bottom: 10px;
+}
+
+/* The status switch sits in the message list's own header. */
+.list-col {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.list-col .list {
+  border: 0;
+  border-radius: 0;
+  max-height: 72vh;
+}
+
+.list-head {
+  display: flex;
+  border-bottom: 1px solid var(--line);
+  background: #f8fafc;
+}
+
+.list-head-btn {
+  flex: 1;
+  font: inherit;
+  font-size: 0.82rem;
+  color: #64748b;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 8px 4px;
+  cursor: pointer;
+}
+
+.list-head-on {
+  color: var(--brand);
+  font-weight: 600;
+  border-bottom-color: var(--brand);
+  background: var(--card);
+}
+
+.list-head-count {
+  margin-left: 5px;
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.status-control {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--card);
+}
+
+.seg {
+  font: inherit;
+  font-size: 0.85rem;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.seg:last-child {
+  border-right: 0;
+}
+
+.seg-on {
+  background: var(--brand);
+  color: #fff;
+}
+
+.workflow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.status,
+.wait {
+  border-radius: 6px;
+  padding: 1px 7px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.status-new {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.status-replied {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.status-done {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.wait-waiting {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.wait-overdue {
+  background: var(--urgent-soft);
+  color: var(--urgent);
+}
+
+.wait-replied {
+  background: transparent;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.task-card {
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 10px 0 14px;
+}
+
+.task-form {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 6px;
+}
+
+@media (max-width: 700px) {
+  .task-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+.task-made {
+  margin: 4px 0;
+  color: #166534;
+}
+
+.tasks-panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 18px;
+}
+
+.tasks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.task {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.task-check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  flex: 1;
+  cursor: pointer;
+}
+
+.task-done strong {
+  text-decoration: line-through;
+  color: #64748b;
+}
+
+.due-overdue {
+  color: var(--urgent);
+  font-weight: 600;
+}
+
+.link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--brand);
+  cursor: pointer;
+  text-decoration: underline;
+  font: inherit;
 }

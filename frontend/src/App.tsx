@@ -2,7 +2,33 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import { FactSheet, MessageRow, TriagePanel } from "./components";
 import { countByFilter, filterMessages, timeAgo } from "./lib/inbox";
-import type { Filter, LiveTriage, Message, Meta, Property } from "./types";
+import {
+  type DemoState,
+  EMPTY_STATE,
+  addTask,
+  loadState,
+  messageKey,
+  saveState,
+  setStatus,
+  statusOf,
+  tasksFor,
+  toggleTask,
+  STATUS_LABELS,
+  waitInfo,
+} from "./lib/workflow";
+import type { Filter, LiveTriage, Message, Meta, Property, Status } from "./types";
+import { StatusControl, TaskSuggestionCard, TasksView, WaitChip } from "./workflow-ui";
+
+type View = "inbox" | "tasks";
+type StatusFilter = "any" | Status;
+
+function browserStorage(): Storage | undefined {
+  try {
+    return window.localStorage;
+  } catch {
+    return undefined;
+  }
+}
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: "all", label: "All" },
@@ -26,6 +52,18 @@ export default function App() {
   const [filter, setFilter] = useState<Filter>("all");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [demo, setDemo] = useState<DemoState>(() => loadState(browserStorage()));
+  const [view, setView] = useState<View>("inbox");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("any");
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => saveState(browserStorage(), demo), [demo]);
+
+  // Keep the waiting times moving.
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     Promise.all([api.messages(), api.meta(), api.properties()])
@@ -38,9 +76,33 @@ export default function App() {
       .catch((e: Error) => setLoadError(e.message));
   }, []);
 
-  const visible = useMemo(() => filterMessages(messages, filter), [messages, filter]);
+  const visible = useMemo(
+    () =>
+      filterMessages(messages, filter).filter(
+        (m) => statusFilter === "any" || statusOf(m, demo).status === statusFilter,
+      ),
+    [messages, filter, statusFilter, demo],
+  );
   const counts = useMemo(() => countByFilter(messages), [messages]);
+  const statusCounts = useMemo(() => {
+    const c: Record<StatusFilter, number> = {
+      any: messages.length,
+      new: 0,
+      replied: 0,
+      done: 0,
+    };
+    for (const m of messages) c[statusOf(m, demo).status] += 1;
+    return c;
+  }, [messages, demo]);
+  const openTasks = demo.tasks.filter((t) => !t.done).length;
   const selected = messages.find((m) => m.id === selectedId) ?? null;
+
+  function openMessage(m: Message) {
+    setView("inbox");
+    setFilter("all");
+    setStatusFilter("any");
+    setSelectedId(m.id);
+  }
 
   return (
     <div className="page">
@@ -62,47 +124,129 @@ export default function App() {
 
       <TryItBox meta={meta} properties={properties} />
 
-      <nav className="filters" aria-label="Filter messages">
-        {FILTERS.map((f) => (
+      <div className="tabs">
+        <div role="tablist" aria-label="View">
           <button
-            key={f.key}
             type="button"
-            className={`filter${filter === f.key ? " filter-on" : ""}${f.key === "urgent" ? " filter-urgent" : ""}${f.key === "needs_host" ? " filter-host" : ""}`}
-            onClick={() => setFilter(f.key)}
-            aria-pressed={filter === f.key}
+            role="tab"
+            className={`tab${view === "inbox" ? " tab-on" : ""}`}
+            aria-selected={view === "inbox"}
+            onClick={() => setView("inbox")}
           >
-            {f.label} <span className="count">{counts[f.key]}</span>
+            Inbox <span className="tab-badge">{statusCounts.new}</span>
           </button>
-        ))}
-      </nav>
-
-      <main className="layout">
-        <ul className="list" aria-label="Guest messages">
-          {visible.map((m) => (
-            <MessageRow
-              key={m.id}
-              message={m}
-              selected={m.id === selectedId}
-              onSelect={() => setSelectedId(m.id)}
-            />
-          ))}
-          {visible.length === 0 && messages.length > 0 && (
-            <li className="muted empty">No messages in this filter.</li>
-          )}
-        </ul>
-        <div className="detail">
-          {selected ? (
-            <MessageDetail
-              key={selected.id}
-              message={selected}
-              meta={meta}
-              property={properties.find((p) => p.id === selected.property_id)}
-            />
-          ) : (
-            <p className="muted">Select a message.</p>
-          )}
+          <button
+            type="button"
+            role="tab"
+            className={`tab${view === "tasks" ? " tab-on" : ""}`}
+            aria-selected={view === "tasks"}
+            onClick={() => setView("tasks")}
+          >
+            Tasks <span className="tab-badge">{openTasks}</span>
+          </button>
         </div>
-      </main>
+        <button
+          type="button"
+          className="link small"
+          onClick={() => setDemo(EMPTY_STATE)}
+          title="Clear your statuses and tasks (saved only in this browser)"
+        >
+          Reset demo
+        </button>
+      </div>
+
+      {view === "tasks" ? (
+        <section className="tasks-panel">
+          <TasksView
+            tasks={demo.tasks}
+            onToggle={(id) => setDemo((s) => toggleTask(s, id))}
+            onOpen={openMessage}
+            now={now}
+            findMessage={(t) => messages.find((m) => messageKey(m) === t.messageKey)}
+          />
+          <p className="muted small">
+            Your statuses and tasks are saved in this browser only, so other visitors never see
+            them.
+          </p>
+        </section>
+      ) : (
+        <>
+          <nav className="filters" aria-label="Filter messages">
+            {FILTERS.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                className={`filter${filter === f.key ? " filter-on" : ""}${f.key === "urgent" ? " filter-urgent" : ""}${f.key === "needs_host" ? " filter-host" : ""}`}
+                onClick={() => setFilter(f.key)}
+                aria-pressed={filter === f.key}
+              >
+                {f.label} <span className="count">{counts[f.key]}</span>
+              </button>
+            ))}
+          </nav>
+
+          <main className="layout">
+            <div className="list-col">
+              <div className="list-head" role="group" aria-label="Filter by status">
+                {(["any", "new", "replied", "done"] as StatusFilter[]).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    className={`list-head-btn${statusFilter === s ? " list-head-on" : ""}`}
+                    onClick={() => setStatusFilter(s)}
+                    aria-pressed={statusFilter === s}
+                  >
+                    {s === "any" ? "All" : STATUS_LABELS[s]}
+                    <span className="list-head-count">{statusCounts[s]}</span>
+                  </button>
+                ))}
+              </div>
+              <ul className="list" aria-label="Guest messages">
+                {visible.map((m) => (
+                  <MessageRow
+                    key={m.id}
+                    message={m}
+                    selected={m.id === selectedId}
+                    onSelect={() => setSelectedId(m.id)}
+                    extra={
+                      <>
+                        <span className={`status status-${statusOf(m, demo).status}`}>
+                          {STATUS_LABELS[statusOf(m, demo).status]}
+                        </span>
+                        <WaitChip wait={waitInfo(m, demo, now)} />
+                      </>
+                    }
+                  />
+                ))}
+                {visible.length === 0 && messages.length > 0 && (
+                  <li className="muted empty">No messages in this filter.</li>
+                )}
+              </ul>
+            </div>
+            <div className="detail">
+              {selected ? (
+                <MessageDetail
+                  key={selected.id}
+                  message={selected}
+                  meta={meta}
+                  property={properties.find((p) => p.id === selected.property_id)}
+                  workflow={
+                    <Workflow
+                      message={selected}
+                      demo={demo}
+                      now={now}
+                      onStatus={(s) => setDemo((d) => setStatus(d, selected, s))}
+                      onTask={(t) => setDemo((d) => addTask(d, selected, t))}
+                    />
+                  }
+                />
+              ) : (
+                <p className="muted">Select a message.</p>
+              )}
+            </div>
+          </main>
+        </>
+      )}
 
       <footer className="footer muted small">
         Demo app with invented properties and guests. AI-assisted build, human-reviewed.
@@ -111,14 +255,46 @@ export default function App() {
   );
 }
 
+function Workflow({
+  message,
+  demo,
+  now,
+  onStatus,
+  onTask,
+}: {
+  message: Message;
+  demo: DemoState;
+  now: number;
+  onStatus: (s: Status) => void;
+  onTask: Parameters<typeof TaskSuggestionCard>[0]["onCreate"];
+}) {
+  return (
+    <>
+      <div className="workflow">
+        <StatusControl status={statusOf(message, demo).status} onChange={onStatus} />
+        <WaitChip wait={waitInfo(message, demo, now)} />
+      </div>
+      <TaskSuggestionCard
+        key={message.id}
+        suggestion={message.triage.suggested_task}
+        existing={tasksFor(message, demo)}
+        onCreate={onTask}
+        now={now}
+      />
+    </>
+  );
+}
+
 function MessageDetail({
   message,
   meta,
   property,
+  workflow,
 }: {
   message: Message;
   meta: Meta | null;
   property?: Property;
+  workflow: React.ReactNode;
 }) {
   const [live, setLive] = useState<LiveTriage | null>(null);
   const [runs, setRuns] = useState(0);
@@ -149,6 +325,7 @@ function MessageDetail({
         </div>
       </div>
       <blockquote className="body">{message.body}</blockquote>
+      {workflow}
       <TriagePanel triage={message.triage} title="Triage" />
       <FactSheet property={property} triage={live?.triage ?? message.triage} />
       <div className="actions">
@@ -196,8 +373,8 @@ function TryItBox({ meta, properties }: { meta: Meta | null; properties: Propert
       <form onSubmit={submit}>
         <h2>Try your own guest message</h2>
         <p className="muted small">
-          Type any message a guest might send, in any language. It is sorted and answered live
-          from the property's facts, and never stored.
+          Type any message a guest might send, in any language. It is sorted and answered live from
+          the property's facts, and never stored.
         </p>
         <div className="tryit-fields">
           <select
@@ -244,7 +421,9 @@ function TryItBox({ meta, properties }: { meta: Meta | null; properties: Propert
         </div>
       </form>
       {error && <p className="error">{error}</p>}
-      {result && <TriagePanel key={runs} triage={result.triage} title="Result for your message" fresh />}
+      {result && (
+        <TriagePanel key={runs} triage={result.triage} title="Result for your message" fresh />
+      )}
       <FactSheet property={property} triage={result?.triage} />
     </section>
   );

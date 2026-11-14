@@ -36,7 +36,17 @@ export interface Triage {
   /** Low confidence: a person should check before replying. */
   needs_host: boolean;
   facts_used: FactRef[];
+  suggested_task: TaskSuggestion | null;
 }
+
+export interface TaskSuggestion {
+  title: string;
+  assignee: "host" | "cleaner" | "maintenance";
+  assignee_label: string;
+  due_minutes: number;
+}
+
+export type Status = "new" | "replied" | "done";
 
 export interface Message {
   id: number;
@@ -47,6 +57,9 @@ export interface Message {
   received_at: string; // UTC, without a zone suffix
   body: string;
   triage: Triage;
+  /** Starting status of the demo data; the visitor's own changes live in the browser. */
+  status: Status;
+  replied_at: string | null;
 }
 
 export interface LiveTriage {

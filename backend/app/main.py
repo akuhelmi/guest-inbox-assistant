@@ -3,6 +3,7 @@
 import os
 import threading
 from collections.abc import Iterator
+from datetime import timedelta
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -22,14 +23,16 @@ from .schemas import (
     MessageOut,
     MetaOut,
     PropertyOut,
+    TaskSuggestion,
     TriageOut,
     TriageRequest,
 )
-from .seed import ensure_data
+from .seed import SAVED, demo_clock_offset, ensure_data
 from .triage import (
     CATEGORIES,
     CATEGORY_LABELS,
     FACT_LABELS,
+    TASK_ASSIGNEES,
     TriageInput,
     TriageResult,
     build_triager,
@@ -50,6 +53,16 @@ def _from_result(r: TriageResult) -> TriageOut:
         confidence=r.confidence,
         needs_host=r.confidence == "low",
         facts_used=[FactRef(key=k, label=FACT_LABELS.get(k, k)) for k in r.facts_used],
+        suggested_task=(
+            TaskSuggestion(
+                title=r.task_title,
+                assignee=r.task_assignee,
+                assignee_label=TASK_ASSIGNEES.get(r.task_assignee, r.task_assignee),
+                due_minutes=r.task_due_minutes,
+            )
+            if r.task_title
+            else None
+        ),
     )
 
 
@@ -63,17 +76,24 @@ def _saved_result(m: Message) -> TriageResult:
         language=m.language or "en",
         confidence=m.confidence or "medium",
         facts_used=tuple(m.facts_used or ()),
+        task_title=m.task_title or "",
+        task_assignee=m.task_assignee or "",
+        task_due_minutes=m.task_due_minutes or 0,
     )
 
 
-def _message_out(m: Message) -> MessageOut:
+def _message_out(m: Message, clock: timedelta = timedelta(0)) -> MessageOut:
+    """`clock` shifts saved examples forward so their ages stay as seeded (see seed.py)."""
+    shift = clock if m.triaged_by == SAVED else timedelta(0)
     return MessageOut(
         id=m.id,
         guest_name=m.guest_name,
         property_id=m.property_id,
         property_name=m.property.name,
         property_city=m.property.city,
-        received_at=m.received_at,
+        received_at=m.received_at + shift,
+        status=m.status or "new",
+        replied_at=m.replied_at + shift if m.replied_at else None,
         body=m.body,
         triage=_from_result(_saved_result(m)),
     )
@@ -181,14 +201,15 @@ def create_app(settings: Settings | None = None, triager=None) -> FastAPI:
             query = query.where(Message.urgent == urgent)
         # Urgent first, then newest first.
         query = query.order_by(Message.urgent.desc(), Message.received_at.desc())
-        return [_message_out(m) for m in session.scalars(query)]
+        clock = demo_clock_offset(session)
+        return [_message_out(m, clock) for m in session.scalars(query)]
 
     @app.get("/api/messages/{message_id}", response_model=MessageOut)
     def get_message(message_id: int, session: Session = Depends(get_session)) -> MessageOut:
         m = session.get(Message, message_id, options=[joinedload(Message.property)])
         if m is None:
             raise HTTPException(status_code=404, detail="Message not found.")
-        return _message_out(m)
+        return _message_out(m, demo_clock_offset(session))
 
     @app.post("/api/messages/{message_id}/triage", response_model=LiveTriageOut)
     def retriage_message(
