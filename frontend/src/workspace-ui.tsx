@@ -3,15 +3,15 @@ import { CategoryChip, ConfidenceBadge, FactSheet, LanguageBadge, UrgentBadge } 
 import { isAi } from "./lib/agent";
 import { timeAgo } from "./lib/inbox";
 import {
+  type PlanLine,
   type Proposal,
   type Thread,
+  type ThreadTurn,
   channelLabel,
   currentStep,
-  reviewText,
   sendLabel,
-  stepTitle,
 } from "./lib/proposals";
-import { STATUS_LABELS, type Task, type WaitInfo, dueLabel } from "./lib/workflow";
+import { STATUS_LABELS, type WaitInfo } from "./lib/workflow";
 import type { Message, Property, Status, TaskSuggestion } from "./types";
 import { WaitChip } from "./workflow-ui";
 
@@ -187,12 +187,101 @@ function ProposalCard({
   );
 }
 
+function PlanList({ plan }: { plan: PlanLine[] }) {
+  return (
+    <ol className="plan">
+      {plan.map((line, i) => (
+        <li key={i} className={`plan-step plan-${line.state}`}>
+          <span className="plan-mark" aria-hidden="true">
+            {line.state === "approved" ? "✓" : line.state === "dismissed" ? "–" : ""}
+          </span>
+          {line.title}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function TurnView({
+  turn,
+  lastPlan,
+  thread,
+  current,
+  agreed,
+  channel,
+  onAgree,
+  onApprove,
+  onChange,
+  onDismiss,
+  onNext,
+}: {
+  turn: ThreadTurn;
+  /** The newest plan in the thread: only it gets the Agree button. */
+  lastPlan: boolean;
+  thread: Thread;
+  current: Proposal | null;
+  agreed: boolean;
+  channel: string;
+  onAgree: () => void;
+  onApprove: (p: Proposal) => void;
+  onChange: (p: Proposal, change: Partial<Pick<Proposal, "draft" | "task">>) => void;
+  onDismiss: (p: Proposal) => void;
+  onNext: (() => void) | null;
+}) {
+  if (turn.role === "host") {
+    return <div className={`bubble bubble-host${turn.action ? " bubble-action" : ""}`}>{turn.text}</div>;
+  }
+  const by = turn.by === "saved" ? "Assistant" : turn.by && isAi(turn.by) ? "AI" : "Quick commands";
+  const step = turn.step ? thread.proposals.find((p) => p.pid === turn.step) : undefined;
+  return (
+    <div className={`bubble bubble-assistant${turn.step ? " bubble-step" : ""}`}>
+      <p className="bubble-plain">
+        {turn.step ? <strong>{turn.text}</strong> : turn.text}
+      </p>
+      {turn.note && <p className="bubble-note small">{turn.note}</p>}
+      {turn.plan && (
+        <>
+          <p className="plan-head small">Plan</p>
+          <PlanList plan={turn.plan} />
+          {lastPlan && !agreed && current && (
+            <div className="review-actions">
+              <button type="button" className="btn btn-small" onClick={onAgree}>
+                Agree &amp; proceed
+              </button>
+              <span className="muted small">or reply below to discuss</span>
+            </div>
+          )}
+        </>
+      )}
+      {turn.step &&
+        (step ? (
+          <ProposalCard
+            p={step}
+            channel={channel}
+            onApprove={() => onApprove(step)}
+            onChange={(change) => onChange(step, change)}
+            onDismiss={() => onDismiss(step)}
+          />
+        ) : (
+          <p className="muted small">Replaced by a newer version below.</p>
+        ))}
+      {turn.end && onNext && (
+        <div className="review-actions">
+          <button type="button" className="btn btn-small" onClick={onNext}>
+            Next message →
+          </button>
+        </div>
+      )}
+      <span className="bubble-by muted small">{by}</span>
+    </div>
+  );
+}
+
 export function MessageWorkspace({
   message,
   property,
   status,
   wait,
-  tasks,
   thread,
   busy,
   aiLabel,
@@ -205,13 +294,11 @@ export function MessageWorkspace({
   onDismiss,
   onStatus,
   onAsk,
-  now,
 }: {
   message: Message;
   property?: Property;
   status: Status;
   wait: WaitInfo;
-  tasks: Task[];
   thread: Thread;
   busy: boolean;
   aiLabel: string;
@@ -225,19 +312,18 @@ export function MessageWorkspace({
   onDismiss: (p: Proposal) => void;
   onStatus: (s: Status) => void;
   onAsk: (text: string) => void;
-  now: number;
 }) {
   const [text, setText] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
-  const steps = thread.proposals;
   const current = currentStep(thread);
+  const lastPlan = thread.turns.reduce((found, x, i) => (x.plan ? i : found), -1);
   const agreed = Boolean(thread.agreed);
   const t = message.triage;
 
   useEffect(() => {
     const log = logRef.current;
     if (log) log.scrollTop = log.scrollHeight;
-  }, [thread.turns.length, busy, current?.pid, agreed]);
+  }, [thread.turns.length, busy]);
 
   function submit(e?: React.FormEvent) {
     e?.preventDefault();
@@ -285,125 +371,44 @@ export function MessageWorkspace({
           <span className="muted small">{t.reason}</span>
         </div>
 
-        <div className="review">
-          <h3>Review</h3>
-          <p>{reviewText(message)}</p>
-          {steps.length > 0 ? (
-            <>
-              <h4>Plan</h4>
-              <ol className="plan">
-                {steps.map((p) => (
-                  <li
-                    key={p.pid}
-                    className={`plan-step plan-${p.state}${agreed && p === current ? " plan-now" : ""}`}
-                  >
-                    <span className="plan-mark" aria-hidden="true">
-                      {p.state === "approved" ? "✓" : p.state === "dismissed" ? "–" : ""}
-                    </span>
-                    {stepTitle(p, message)}
-                    {p.state === "dismissed" && <span className="muted small"> (skipped)</span>}
-                  </li>
-                ))}
-              </ol>
-              {!agreed && current && (
-                <div className="review-actions">
-                  <button type="button" className="btn" onClick={onAgree}>
-                    Agree &amp; proceed
-                  </button>
-                  <span className="muted small">or type below to change the plan</span>
-                </div>
-              )}
-            </>
-          ) : (
-            <p className="muted small">Nothing left to do for this message.</p>
-          )}
+        <div className="ws-more-row">
+          <FactSheet property={property} triage={t} />
+          <details className="ws-more">
+            <summary className="small">Change the status yourself</summary>
+            <div className="status-control" role="group" aria-label="Message status">
+              {(Object.keys(STATUS_LABELS) as Status[]).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className={`seg${status === s ? " seg-on" : ""}`}
+                  aria-pressed={status === s}
+                  onClick={() => onStatus(s)}
+                >
+                  {STATUS_LABELS[s]}
+                </button>
+              ))}
+            </div>
+          </details>
         </div>
 
-        {agreed &&
-          steps
-            .filter((p) => p.state !== "pending")
-            .map((p) => (
-              <p key={p.pid} className={`step-done step-${p.state} small`}>
-                {p.state === "approved" ? "✓" : "–"} Step {steps.indexOf(p) + 1}:{" "}
-                {p.state === "approved" ? (p.result ?? "Done") : "Skipped"}
-              </p>
-            ))}
-
-        {thread.turns.length > 0 && (
-          <div className="ws-thread" aria-live="polite">
-            {thread.turns.map((turn, i) =>
-              turn.role === "host" ? (
-                <div key={i} className="bubble bubble-host">
-                  {turn.text}
-                </div>
-              ) : (
-                <div key={i} className="bubble bubble-assistant">
-                  <p className="bubble-plain">{turn.text}</p>
-                  {turn.note && <p className="bubble-note small">{turn.note}</p>}
-                  <span className="bubble-by muted small">
-                    {turn.by && isAi(turn.by) ? "AI" : "Quick commands"}
-                  </span>
-                </div>
-              ),
-            )}
-          </div>
-        )}
-
-        {agreed && current && (
-          <div className="step">
-            <p className="step-count muted small">
-              Step {steps.indexOf(current) + 1} of {steps.length}
-            </p>
-            <ProposalCard
-              key={current.pid}
-              p={current}
+        <div className="ws-thread" aria-live="polite">
+          {thread.turns.map((turn, i) => (
+            <TurnView
+              key={i}
+              turn={turn}
+              lastPlan={i === lastPlan}
+              thread={thread}
+              current={current}
+              agreed={agreed}
               channel={message.channel}
-              onApprove={() => onApprove(current)}
-              onChange={(change) => onChange(current, change)}
-              onDismiss={() => onDismiss(current)}
+              onAgree={onAgree}
+              onApprove={onApprove}
+              onChange={onChange}
+              onDismiss={onDismiss}
+              onNext={onNext}
             />
-          </div>
-        )}
-
-        {agreed && !current && steps.length > 0 && (
-          <div className="step-end">
-            <strong>All steps done.</strong>
-            {onNext && (
-              <button type="button" className="btn btn-small" onClick={onNext}>
-                Next message →
-              </button>
-            )}
-          </div>
-        )}
-
-        {tasks.length > 0 && (
-          <div className="ws-tasks small">
-            {tasks.map((task) => (
-              <p key={task.id} className="task-made">
-                ✓ Task: {task.title} · {task.assigneeLabel} · {dueLabel(task, now)}
-              </p>
-            ))}
-          </div>
-        )}
-
-        <details className="ws-more">
-          <summary className="small">Change the status yourself</summary>
-          <div className="status-control" role="group" aria-label="Message status">
-            {(Object.keys(STATUS_LABELS) as Status[]).map((s) => (
-              <button
-                key={s}
-                type="button"
-                className={`seg${status === s ? " seg-on" : ""}`}
-                aria-pressed={status === s}
-                onClick={() => onStatus(s)}
-              >
-                {STATUS_LABELS[s]}
-              </button>
-            ))}
-          </div>
-        </details>
-        <FactSheet property={property} triage={t} />
-
+          ))}
+        </div>
         {busy && <div className="bubble bubble-assistant bubble-busy muted">Thinking…</div>}
       </div>
 
@@ -416,7 +421,7 @@ export function MessageWorkspace({
             value={text}
             placeholder={
               !agreed
-                ? 'Change the plan, e.g. "also offer a late check-out"'
+                ? 'Reply to the assistant, e.g. "also offer a late check-out"'
                 : current
                   ? 'Change this step, e.g. "make it warmer"'
                   : "Ask anything about this guest"
@@ -433,7 +438,7 @@ export function MessageWorkspace({
         </div>
         <div className="composer-foot small muted">
           <span>
-            {agreed && current ? "The AI updates this step." : "The AI updates the plan."}
+            {agreed && current ? "Reply to change this step." : "Reply to discuss the plan."}
           </span>
           <span>{aiLabel}</span>
         </div>

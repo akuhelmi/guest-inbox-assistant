@@ -4,11 +4,13 @@ import {
   THREADS_KEY,
   addHostTurn,
   addReply,
+  advance,
   agreePlan,
   channelLabel,
   currentStep,
   ensureThread,
   loadThreads,
+  resolveStep,
   resultText,
   saveThreads,
   savedProposals,
@@ -95,7 +97,9 @@ describe("threads", () => {
     ]);
     expect(t.proposals[1].task?.due_minutes).toBe(15);
     expect(t.proposals[1].source).toBe("claude");
-    expect(t.turns.map((x) => x.role)).toEqual(["host", "assistant"]);
+    expect(t.turns.map((x) => x.role)).toEqual(["assistant", "host", "assistant"]);
+    // The answer shows the changed plan, with the reply already done.
+    expect(t.turns.at(-1)?.plan?.map((l) => l.state)).toEqual(["approved", "pending", "pending"]);
   });
 
   it("lets a whole AI plan drop a step the host doesn't want", () => {
@@ -121,20 +125,54 @@ describe("threads", () => {
     ]);
   });
 
-  it("walks the plan one step at a time after Agree", () => {
+  it("opens with the review and the plan as the assistant's first message", () => {
+    const t = threadFor({}, leak, EMPTY_STATE);
+    expect(t.turns).toHaveLength(1);
+    expect(t.turns[0].role).toBe("assistant");
+    expect(t.turns[0].text).toBe(reviewText(leak));
+    expect(t.turns[0].plan?.map((l) => l.title)).toEqual([
+      `Reply to ${leak.guest_name} on Airbnb`,
+      "Create a task for Aiman (maintenance) and notify them: Plumber",
+      "Move the message to Replied",
+    ]);
+  });
+
+  it("posts one step at a time after Agree, and the host's clicks as replies", () => {
     let threads = ensureThread({}, leak, EMPTY_STATE);
-    expect(threadFor(threads, leak, EMPTY_STATE).agreed).toBeFalsy();
     threads = agreePlan(threads, leak, EMPTY_STATE);
     let t = threadFor(threads, leak, EMPTY_STATE);
     expect(t.agreed).toBe(true);
-    expect(currentStep(t)?.kind).toBe("draft");
-    threads = setProposal(threads, leak, EMPTY_STATE, t.proposals[0].pid, { state: "dismissed" });
+    expect(t.turns.slice(1).map((x) => [x.role, x.text])).toEqual([
+      ["host", "Agreed, go ahead."],
+      ["assistant", "Step 1 of 3"],
+    ]);
+    expect(t.turns.at(-1)?.step).toBe(currentStep(t)?.pid);
+
+    threads = resolveStep(threads, leak, EMPTY_STATE, t.proposals[0].pid, "approved", "Sent on Airbnb");
+    threads = resolveStep(threads, leak, EMPTY_STATE, t.proposals[1].pid, "dismissed");
     t = threadFor(threads, leak, EMPTY_STATE);
-    expect(currentStep(t)?.kind).toBe("task");
-    for (const p of t.proposals) {
-      threads = setProposal(threads, leak, EMPTY_STATE, p.pid, { state: "approved" });
-    }
-    expect(currentStep(threadFor(threads, leak, EMPTY_STATE))).toBeNull();
+    expect(t.turns.slice(3).map((x) => x.text)).toEqual([
+      "✓ Sent on Airbnb",
+      "Step 2 of 3",
+      "Skip this step.",
+      "Step 3 of 3",
+    ]);
+    threads = resolveStep(threads, leak, EMPTY_STATE, t.proposals[2].pid, "approved", "Marked Replied");
+    t = threadFor(threads, leak, EMPTY_STATE);
+    expect(currentStep(t)).toBeNull();
+    expect(t.turns.at(-1)?.end).toBe(true);
+    // Advancing again adds nothing.
+    expect(advance(t)).toBe(t);
+  });
+
+  it("posts the new version of a step the host asked to change", () => {
+    let threads = agreePlan(ensureThread({}, leak, EMPTY_STATE), leak, EMPTY_STATE);
+    const [draft] = threadFor(threads, leak, EMPTY_STATE).proposals;
+    threads = addReply(threads, leak, EMPTY_STATE, reply({ cards: [{ ...draft, draft: "Warmer" }] }), NOW);
+    const t = threadFor(threads, leak, EMPTY_STATE);
+    const last = t.turns.at(-1);
+    expect(last?.text).toBe("Step 1 of 3");
+    expect(t.proposals.find((p) => p.pid === last?.step)?.draft).toBe("Warmer");
   });
 
   it("saves and loads, tolerating bad data", () => {

@@ -1089,26 +1089,9 @@ h3 {
   flex-wrap: wrap;
 }
 
-.review {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--brand);
-  border-radius: 10px;
-  padding: 10px 14px;
-}
-
-.review h3,
-.review h4 {
-  margin: 0 0 4px;
-}
-
-.review h4 {
-  margin-top: 10px;
-  font-size: 0.9rem;
-}
-
-.review p {
-  margin: 0;
+.plan-head {
+  margin: 8px 0 2px;
+  font-weight: 600;
 }
 
 .plan {
@@ -1122,8 +1105,7 @@ h3 {
   counter-increment: step;
   display: flex;
   gap: 6px;
-  padding: 3px 6px;
-  border-radius: 6px;
+  padding: 2px 0;
 }
 
 .plan-step::before {
@@ -1147,11 +1129,6 @@ h3 {
   text-decoration: line-through;
 }
 
-.plan-now {
-  background: var(--brand-soft);
-  font-weight: 600;
-}
-
 .review-actions {
   display: flex;
   gap: 10px;
@@ -1160,27 +1137,23 @@ h3 {
   margin-top: 10px;
 }
 
-.step-done {
-  margin: 0;
-  color: var(--muted);
+.bubble-step {
+  width: 88%;
 }
 
-.step-approved {
-  color: var(--brand);
+.bubble-step .acard {
+  margin-top: 6px;
 }
 
-.step-count {
-  margin: 0 0 4px;
-}
-
-.step-end {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-  border-radius: 10px;
+.bubble-action {
   background: var(--brand-soft);
+  color: var(--text);
+  border: 1px solid var(--brand);
+}
+
+.ws-more-row {
+  display: grid;
+  gap: 6px;
 }
 
 .ws-more summary {

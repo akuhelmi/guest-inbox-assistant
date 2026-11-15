@@ -7,9 +7,9 @@ import type { AgentCard, AgentReply, Message, TaskSuggestion } from "../types";
 import { type CardState } from "./agent";
 import { type DemoState, messageKey, statusOf, tasksFor } from "./workflow";
 
-export const THREADS_KEY = "gia-threads-v1";
+export const THREADS_KEY = "gia-threads-v2";
 /** Turns kept per message thread. */
-export const MAX_TURNS = 20;
+export const MAX_TURNS = 40;
 
 export const CHANNEL_LABELS: Record<string, string> = {
   airbnb: "Airbnb",
@@ -44,11 +44,26 @@ export interface Proposal extends AgentCard {
   source: string;
 }
 
+export interface PlanLine {
+  title: string;
+  state: CardState;
+}
+
+/**
+ * One entry of the message's thread, oldest first. An assistant turn can carry the plan as it
+ * stood then (`plan`) or one step to act on (`step`, a proposal id). A host turn with `action`
+ * is a button press ("Sent on Airbnb"), not typed text.
+ */
 export interface ThreadTurn {
   role: "host" | "assistant";
   text: string;
   by?: string;
   note?: string | null;
+  plan?: PlanLine[];
+  step?: string;
+  action?: boolean;
+  /** The closing "all steps done" message. */
+  end?: boolean;
 }
 
 export interface Thread {
@@ -113,14 +128,58 @@ export function toProposals(cards: AgentCard[], source: string, now: number = Da
   return cards.map((c) => ({ ...c, pid: pid(now), state: "pending" as const, source }));
 }
 
+export function planLines(proposals: Proposal[], m: Message): PlanLine[] {
+  return proposals.map((p) => ({ title: stepTitle(p, m), state: p.state }));
+}
+
+/** The agent's first message: what the guest wants and the plan, before anything is done. */
+function opening(m: Message, proposals: Proposal[]): ThreadTurn {
+  return proposals.length
+    ? {
+        role: "assistant",
+        text: reviewText(m),
+        by: "saved",
+        plan: planLines(proposals, m),
+      }
+    : { role: "assistant", text: `${reviewText(m)} Nothing left to do here.`, by: "saved" };
+}
+
 export function threadFor(threads: Threads, m: Message, demo: DemoState): Thread {
-  return (
-    threads[messageKey(m)] ?? { proposals: toProposals(savedProposals(m, demo), "saved"), turns: [] }
-  );
+  const saved = threads[messageKey(m)];
+  if (saved) return saved;
+  const proposals = toProposals(savedProposals(m, demo), "saved");
+  return { proposals, turns: [opening(m, proposals)] };
+}
+
+/**
+ * After the plan is agreed, keep the thread moving: post the next step as the agent's message,
+ * or a closing message when every step is done.
+ */
+export function advance(t: Thread): Thread {
+  if (!t.agreed) return t;
+  const current = currentStep(t);
+  const last = t.turns.at(-1);
+  if (current) {
+    if (t.turns.some((x) => x.step === current.pid)) return t;
+    const n = t.proposals.indexOf(current) + 1;
+    return {
+      ...t,
+      turns: [
+        ...t.turns,
+        { role: "assistant", text: `Step ${n} of ${t.proposals.length}`, by: "saved", step: current.pid },
+      ],
+    };
+  }
+  if (t.proposals.length === 0 || last?.end) return t;
+  return {
+    ...t,
+    turns: [...t.turns, { role: "assistant", text: "All steps done.", by: "saved", end: true }],
+  };
 }
 
 function put(threads: Threads, m: Message, thread: Thread): Threads {
-  return { ...threads, [messageKey(m)]: { ...thread, turns: thread.turns.slice(-MAX_TURNS) } };
+  const next = advance(thread);
+  return { ...threads, [messageKey(m)]: { ...next, turns: next.turns.slice(-MAX_TURNS) } };
 }
 
 /** Make sure the message has a thread saved (so its proposals keep their ids). */
@@ -162,12 +221,45 @@ export function addReply(
   return put(threads, m, {
     ...t,
     proposals: [...finished, ...pending],
-    turns: [...t.turns, { role: "assistant", text: reply.text, by: reply.by, note: reply.note }],
+    turns: [
+      ...t.turns,
+      {
+        role: "assistant",
+        text: reply.text,
+        by: reply.by,
+        note: reply.note,
+        // A changed plan is shown in the answer, like the opening message.
+        ...(fresh.length ? { plan: planLines([...finished, ...pending], m) } : {}),
+      },
+    ],
   });
 }
 
 export function agreePlan(threads: Threads, m: Message, demo: DemoState): Threads {
-  return put(threads, m, { ...threadFor(threads, m, demo), agreed: true });
+  const t = threadFor(threads, m, demo);
+  return put(threads, m, {
+    ...t,
+    agreed: true,
+    turns: [...t.turns, { role: "host", text: "Agreed, go ahead.", action: true }],
+  });
+}
+
+/** The host approved or skipped a step: record it in the thread like a reply from them. */
+export function resolveStep(
+  threads: Threads,
+  m: Message,
+  demo: DemoState,
+  id: string,
+  state: "approved" | "dismissed",
+  result?: string,
+): Threads {
+  const t = threadFor(threads, m, demo);
+  const text = state === "approved" ? `✓ ${result ?? "Approved"}` : "Skip this step.";
+  return put(threads, m, {
+    ...t,
+    proposals: t.proposals.map((p) => (p.pid === id ? { ...p, state, result } : p)),
+    turns: [...t.turns, { role: "host", text, action: true }],
+  });
 }
 
 /** The step waiting for the host, or null when the plan is finished. */

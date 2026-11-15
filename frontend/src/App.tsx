@@ -25,6 +25,7 @@ import {
   channelLabel,
   ensureThread,
   loadThreads,
+  resolveStep,
   resultText,
   saveThreads,
   setProposal,
@@ -47,7 +48,6 @@ import {
   saveState,
   setStatus,
   statusOf,
-  tasksFor,
   toggleTask,
   waitInfo,
 } from "./lib/workflow";
@@ -203,8 +203,7 @@ export default function App() {
     );
     setThreads((t) =>
       picked.reduce(
-        (acc, p) =>
-          setProposal(acc, m, demo, p.pid, { state: "approved", result: resultText(p, m.channel) }),
+        (acc, p) => resolveStep(acc, m, demo, p.pid, "approved", resultText(p, m.channel)),
         t,
       ),
     );
@@ -438,7 +437,6 @@ export default function App() {
               property={properties.find((p) => p.id === open.property_id)}
               status={statusOf(open, demo).status}
               wait={waitInfo(open, demo, now)}
-              tasks={tasksFor(open, demo)}
               thread={threadFor(threads, open, demo)}
               busy={wsBusy}
               aiLabel={aiLabel}
@@ -451,12 +449,9 @@ export default function App() {
               onAgree={() => setThreads((t) => agreePlan(t, open, demo))}
               onApprove={(p) => approveProposals(open, [p])}
               onChange={(p, change) => setThreads((t) => setProposal(t, open, demo, p.pid, change))}
-              onDismiss={(p) =>
-                setThreads((t) => setProposal(t, open, demo, p.pid, { state: "dismissed" }))
-              }
+              onDismiss={(p) => setThreads((t) => resolveStep(t, open, demo, p.pid, "dismissed"))}
               onStatus={(s) => setDemo((d) => setStatus(d, open, s))}
               onAsk={(text) => void askAbout(open, text)}
-              now={now}
             />
           ) : (
             <div className="overview">
