@@ -104,6 +104,8 @@ export default function App() {
   const [filter, setFilter] = useState<Filter>("all");
   const [openId, setOpenId] = useState<number | null>(null);
   const [shift, setShift] = useState(false);
+  // Phones show one pane at a time: the inbox, a message, or the Ask panel.
+  const [askOpen, setAskOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const briefed = useRef(false);
@@ -176,6 +178,7 @@ export default function App() {
     if (!m) return;
     setThreads((t) => ensureThread(t, m, demo));
     setView("inbox");
+    setAskOpen(false);
     setOpenId(id);
   }
 
@@ -275,7 +278,7 @@ export default function App() {
     : "";
 
   return (
-    <div className="page page-full">
+    <div className={`page page-full${open || askOpen ? " page-focus" : ""}`}>
       <header className="header">
         <div>
           <h1>Guest Inbox Assistant</h1>
@@ -316,6 +319,13 @@ export default function App() {
           </button>
           <button
             type="button"
+            className="btn btn-secondary phone-only"
+            onClick={() => setAskOpen(true)}
+          >
+            Ask the assistant
+          </button>
+          <button
+            type="button"
             className="link small"
             onClick={reset}
             title="Clear your statuses, tasks and chats (saved only in this browser)"
@@ -334,7 +344,7 @@ export default function App() {
         </p>
       )}
 
-      <main className={`shell2${open ? " has-open" : ""}`}>
+      <main className={`shell2${open ? " has-open" : askOpen ? " ask-open" : ""}`}>
         <section className="queue-col">
           <div className="tabs">
             <div role="tablist" aria-label="View">
@@ -455,6 +465,12 @@ export default function App() {
             />
           ) : (
             <div className="overview">
+              <div className="ws-top phone-only">
+                <button type="button" className="link small" onClick={() => setAskOpen(false)}>
+                  ← Inbox
+                </button>
+                <span className="muted small">Ask about the whole inbox</span>
+              </div>
               <p className="overview-hint muted small">
                 Open a message to see the AI&apos;s review and plan, or ask about the whole inbox
                 here.

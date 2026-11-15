@@ -1244,3 +1244,135 @@ h3 {
     grid-template-columns: 1fr;
   }
 }
+
+/* Phones: one pane at a time, full screen for a message or the Ask panel. */
+.phone-only {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .btn.phone-only {
+    display: inline-block;
+  }
+
+  .ws-top.phone-only {
+    display: flex;
+  }
+
+  .header {
+    margin-bottom: 8px;
+  }
+
+  .header h1 {
+    font-size: 1.25rem;
+    margin: 0;
+  }
+
+  .header p {
+    display: none;
+  }
+
+  .shiftbar {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .stats {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    width: 100%;
+    scrollbar-width: none;
+  }
+
+  .stat {
+    white-space: nowrap;
+    font-size: 0.8rem;
+  }
+
+  .shiftbar-actions {
+    width: 100%;
+  }
+
+  .shiftbar-actions .btn {
+    flex: 1;
+  }
+
+  .tabs {
+    margin-top: 4px;
+  }
+
+  .filters-compact {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+
+  .filters-compact .filter {
+    white-space: nowrap;
+    flex: none;
+  }
+
+  .shell2.ask-open .panel-col {
+    display: block;
+  }
+
+  .shell2.ask-open .queue-col {
+    display: none;
+  }
+
+  .page-focus .header,
+  .page-focus .shiftbar,
+  .page-focus .toast,
+  .page-focus .footer {
+    display: none;
+  }
+
+  .page-focus .panel-col {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    height: 100vh;
+    height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .ws-top {
+    padding: 8px 12px;
+    padding-top: max(8px, env(safe-area-inset-top));
+  }
+
+  .ws-scroll {
+    padding: 10px 12px;
+  }
+
+  .ws-composer,
+  .panel-col .composer {
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+
+  /* 16px stops phones zooming into the field on focus. */
+  .input,
+  .draft,
+  .composer-input {
+    font-size: 16px;
+  }
+
+  .btn {
+    min-height: 40px;
+  }
+
+  .btn-small {
+    min-height: 36px;
+  }
+
+  .acard-actions .link {
+    padding: 8px 4px;
+  }
+
+  .bubble-step {
+    width: 100%;
+    max-width: 100%;
+  }
+}
