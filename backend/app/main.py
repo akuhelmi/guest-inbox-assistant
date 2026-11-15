@@ -389,6 +389,7 @@ def create_app(settings: Settings | None = None, triager=None, agent=None) -> Fa
             by=reply.by,
             ai_left_today=left,
             note=note,
+            plan=reply.plan,
         )
 
     _mount_frontend(app)

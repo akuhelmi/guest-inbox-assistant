@@ -15,7 +15,7 @@ from app.agent import (
     build_agent,
 )
 from app.agent.base import summary_stats
-from app.agent.gemini import GeminiAgent, build_prompt, parse_response
+from app.agent.gemini import GeminiAgent, build_prompt, parse_data, parse_response
 from app.main import create_app
 from app.triage.offline import OfflineTriager
 from tests.conftest import make_settings
@@ -331,7 +331,28 @@ def test_open_message_commands_and_facts():
 def test_prompt_names_the_open_message():
     item = AgentInput(text="what now?", items=ITEMS, properties=(PROP,), focus_id=2)
     assert "message #2 (Tom Hughes) open" in build_prompt(item)
-    assert "open. Answer about it" not in build_prompt(AGENT_INPUT)
+    assert "WHOLE plan still to do" in build_prompt(item)
+    assert "WHOLE plan" not in build_prompt(AGENT_INPUT)
+
+
+def test_rules_plan_for_an_open_message_replaces_its_steps():
+    assert ask_about("", 1).plan is True
+    # A single command only changes the step of its kind.
+    assert ask_about("mark it done", 2).plan is False
+
+
+def test_ai_cards_for_the_open_message_are_the_whole_plan():
+    answer = {
+        "reply": "Warmer reply, plumber task kept.",
+        "highlight": [],
+        "focus": 2,
+        "actions": [{"kind": "status", "message_id": 2, "status": "replied"}],
+    }
+    focused = AgentInput(text="warmer", items=ITEMS, properties=(PROP,), focus_id=2)
+    assert parse_data(answer, focused, by="claude").plan is True
+    assert parse_data(answer, AGENT_INPUT, by="claude").plan is False
+    no_cards = {**answer, "actions": []}
+    assert parse_data(no_cards, focused, by="claude").plan is False
 
 
 def test_api_messages_have_a_channel_and_agent_takes_message_id(client):
@@ -339,7 +360,7 @@ def test_api_messages_have_a_channel_and_agent_takes_message_id(client):
     assert {m["channel"] for m in messages} == {"airbnb", "booking", "direct"}
     first = messages[0]["id"]
     data = client.post("/api/agent", json={"message_id": first}).json()
-    assert data["focus"] == first and data["cards"]
+    assert data["focus"] == first and data["cards"] and data["plan"] is True
     assert all(c["message_id"] == first for c in data["cards"])
     unknown = client.post("/api/agent", json={"message_id": 99999}).json()
     assert "waiting for a reply" in unknown["text"]

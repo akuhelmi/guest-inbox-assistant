@@ -253,7 +253,11 @@ class RulesAgent:
             else "Here's what I'd do. Edit anything, then approve."
         )
         return AgentReply(
-            text=lead, cards=tuple(cards[:MAX_CARDS]), highlight=(target.id,), focus=target.id
+            text=lead,
+            cards=tuple(cards[:MAX_CARDS]),
+            highlight=(target.id,),
+            focus=target.id,
+            plan=True,
         )
 
     def briefing(self, item: AgentInput) -> AgentReply:

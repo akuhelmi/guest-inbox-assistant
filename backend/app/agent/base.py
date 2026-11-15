@@ -96,6 +96,9 @@ class AgentReply:
     highlight: tuple[int, ...] = ()
     focus: int | None = None
     by: str = "rules"
+    # True when the cards are the whole remaining plan for the open message: they replace
+    # the steps still to do. False: each card only replaces the step of its own kind.
+    plan: bool = False
 
 
 class AgentError(Exception):

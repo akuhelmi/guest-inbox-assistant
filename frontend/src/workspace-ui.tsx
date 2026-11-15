@@ -2,7 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { CategoryChip, ConfidenceBadge, FactSheet, LanguageBadge, UrgentBadge } from "./components";
 import { isAi } from "./lib/agent";
 import { timeAgo } from "./lib/inbox";
-import { type Proposal, type Thread, channelLabel, sendLabel } from "./lib/proposals";
+import {
+  type Proposal,
+  type Thread,
+  channelLabel,
+  currentStep,
+  reviewText,
+  sendLabel,
+  stepTitle,
+} from "./lib/proposals";
 import { STATUS_LABELS, type Task, type WaitInfo, dueLabel } from "./lib/workflow";
 import type { Message, Property, Status, TaskSuggestion } from "./types";
 import { WaitChip } from "./workflow-ui";
@@ -166,12 +174,12 @@ function ProposalCard({
               </button>
             )}
             <button type="button" className="link small" onClick={onDismiss}>
-              Dismiss
+              Skip this step
             </button>
           </>
         ) : (
           <span className={`small acard-result-${p.state}`}>
-            {p.state === "approved" ? `✓ ${p.result ?? "Approved"}` : "Dismissed"}
+            {p.state === "approved" ? `✓ ${p.result ?? "Approved"}` : "Skipped"}
           </span>
         )}
       </div>
@@ -191,13 +199,12 @@ export function MessageWorkspace({
   shift,
   onClose,
   onNext,
+  onAgree,
   onApprove,
-  onApproveAll,
   onChange,
   onDismiss,
   onStatus,
   onAsk,
-  onRedo,
   now,
 }: {
   message: Message;
@@ -212,24 +219,25 @@ export function MessageWorkspace({
   shift: { left: number } | null;
   onClose: () => void;
   onNext: (() => void) | null;
+  onAgree: () => void;
   onApprove: (p: Proposal) => void;
-  onApproveAll: () => void;
   onChange: (p: Proposal, change: Partial<Pick<Proposal, "draft" | "task">>) => void;
   onDismiss: (p: Proposal) => void;
   onStatus: (s: Status) => void;
   onAsk: (text: string) => void;
-  onRedo: () => void;
   now: number;
 }) {
   const [text, setText] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
-  const pending = thread.proposals.filter((p) => p.state === "pending");
+  const steps = thread.proposals;
+  const current = currentStep(thread);
+  const agreed = Boolean(thread.agreed);
   const t = message.triage;
 
   useEffect(() => {
     const log = logRef.current;
     if (log) log.scrollTop = log.scrollHeight;
-  }, [thread.turns.length, busy]);
+  }, [thread.turns.length, busy, current?.pid, agreed]);
 
   function submit(e?: React.FormEvent) {
     e?.preventDefault();
@@ -277,61 +285,49 @@ export function MessageWorkspace({
           <span className="muted small">{t.reason}</span>
         </div>
 
-        <div className="ws-section-head">
-          <h3>AI suggests</h3>
-          <button type="button" className="link small" onClick={onRedo} disabled={busy}>
-            Redo with AI
-          </button>
-        </div>
-        {thread.proposals.length === 0 && (
-          <p className="muted small">Nothing left to do here. Ask below if you need anything else.</p>
-        )}
-        <div className="acards">
-          {thread.proposals.map((p) => (
-            <ProposalCard
-              key={p.pid}
-              p={p}
-              channel={message.channel}
-              onApprove={() => onApprove(p)}
-              onChange={(change) => onChange(p, change)}
-              onDismiss={() => onDismiss(p)}
-            />
-          ))}
-          {pending.length > 1 && (
-            <button type="button" className="btn" onClick={onApproveAll}>
-              Approve all ({pending.length})
-            </button>
+        <div className="review">
+          <h3>Review</h3>
+          <p>{reviewText(message)}</p>
+          {steps.length > 0 ? (
+            <>
+              <h4>Plan</h4>
+              <ol className="plan">
+                {steps.map((p) => (
+                  <li
+                    key={p.pid}
+                    className={`plan-step plan-${p.state}${agreed && p === current ? " plan-now" : ""}`}
+                  >
+                    <span className="plan-mark" aria-hidden="true">
+                      {p.state === "approved" ? "✓" : p.state === "dismissed" ? "–" : ""}
+                    </span>
+                    {stepTitle(p, message)}
+                    {p.state === "dismissed" && <span className="muted small"> (skipped)</span>}
+                  </li>
+                ))}
+              </ol>
+              {!agreed && current && (
+                <div className="review-actions">
+                  <button type="button" className="btn" onClick={onAgree}>
+                    Agree &amp; proceed
+                  </button>
+                  <span className="muted small">or type below to change the plan</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="muted small">Nothing left to do for this message.</p>
           )}
         </div>
 
-        {tasks.length > 0 && (
-          <div className="ws-tasks small">
-            {tasks.map((task) => (
-              <p key={task.id} className="task-made">
-                ✓ Task: {task.title} · {task.assigneeLabel} · {dueLabel(task, now)}
+        {agreed &&
+          steps
+            .filter((p) => p.state !== "pending")
+            .map((p) => (
+              <p key={p.pid} className={`step-done step-${p.state} small`}>
+                {p.state === "approved" ? "✓" : "–"} Step {steps.indexOf(p) + 1}:{" "}
+                {p.state === "approved" ? (p.result ?? "Done") : "Skipped"}
               </p>
             ))}
-          </div>
-        )}
-
-        <div className="ws-status">
-          <span className="muted small">Status</span>
-          <div className="status-control" role="group" aria-label="Message status">
-            {(Object.keys(STATUS_LABELS) as Status[]).map((s) => (
-              <button
-                key={s}
-                type="button"
-                className={`seg${status === s ? " seg-on" : ""}`}
-                aria-pressed={status === s}
-                onClick={() => onStatus(s)}
-              >
-                {STATUS_LABELS[s]}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <FactSheet property={property} triage={t} />
 
         {thread.turns.length > 0 && (
           <div className="ws-thread" aria-live="polite">
@@ -352,6 +348,62 @@ export function MessageWorkspace({
             )}
           </div>
         )}
+
+        {agreed && current && (
+          <div className="step">
+            <p className="step-count muted small">
+              Step {steps.indexOf(current) + 1} of {steps.length}
+            </p>
+            <ProposalCard
+              key={current.pid}
+              p={current}
+              channel={message.channel}
+              onApprove={() => onApprove(current)}
+              onChange={(change) => onChange(current, change)}
+              onDismiss={() => onDismiss(current)}
+            />
+          </div>
+        )}
+
+        {agreed && !current && steps.length > 0 && (
+          <div className="step-end">
+            <strong>All steps done.</strong>
+            {onNext && (
+              <button type="button" className="btn btn-small" onClick={onNext}>
+                Next message →
+              </button>
+            )}
+          </div>
+        )}
+
+        {tasks.length > 0 && (
+          <div className="ws-tasks small">
+            {tasks.map((task) => (
+              <p key={task.id} className="task-made">
+                ✓ Task: {task.title} · {task.assigneeLabel} · {dueLabel(task, now)}
+              </p>
+            ))}
+          </div>
+        )}
+
+        <details className="ws-more">
+          <summary className="small">Change the status yourself</summary>
+          <div className="status-control" role="group" aria-label="Message status">
+            {(Object.keys(STATUS_LABELS) as Status[]).map((s) => (
+              <button
+                key={s}
+                type="button"
+                className={`seg${status === s ? " seg-on" : ""}`}
+                aria-pressed={status === s}
+                onClick={() => onStatus(s)}
+              >
+                {STATUS_LABELS[s]}
+              </button>
+            ))}
+          </div>
+        </details>
+        <FactSheet property={property} triage={t} />
+
         {busy && <div className="bubble bubble-assistant bubble-busy muted">Thinking…</div>}
       </div>
 
@@ -362,7 +414,13 @@ export function MessageWorkspace({
             rows={2}
             maxLength={500}
             value={text}
-            placeholder='Tell the AI what to change, e.g. "offer a late check-out instead"'
+            placeholder={
+              !agreed
+                ? 'Change the plan, e.g. "also offer a late check-out"'
+                : current
+                  ? 'Change this step, e.g. "make it warmer"'
+                  : "Ask anything about this guest"
+            }
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) submit(e);
@@ -374,7 +432,9 @@ export function MessageWorkspace({
           </button>
         </div>
         <div className="composer-foot small muted">
-          <span>New suggestions are added to the list above.</span>
+          <span>
+            {agreed && current ? "The AI updates this step." : "The AI updates the plan."}
+          </span>
           <span>{aiLabel}</span>
         </div>
       </form>

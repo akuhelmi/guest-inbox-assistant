@@ -21,6 +21,7 @@ import {
   type Threads,
   addHostTurn,
   addReply,
+  agreePlan,
   channelLabel,
   ensureThread,
   loadThreads,
@@ -32,11 +33,9 @@ import {
 import {
   QUEUE_VIEWS,
   type QueueView,
-  applySafeBatch,
   inView,
   nextInQueue,
   queueSort,
-  safeBatch,
   shiftStats,
 } from "./lib/queue";
 import {
@@ -57,8 +56,6 @@ import { TasksView, WaitChip } from "./workflow-ui";
 import { MessageWorkspace } from "./workspace-ui";
 
 type View = "inbox" | "tasks";
-
-const REDO_TEXT = "Suggest the best actions for this message.";
 
 function errorReply(message: string): AgentReply {
   return {
@@ -107,7 +104,6 @@ export default function App() {
   const [filter, setFilter] = useState<Filter>("all");
   const [openId, setOpenId] = useState<number | null>(null);
   const [shift, setShift] = useState(false);
-  const [confirmBatch, setConfirmBatch] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const briefed = useRef(false);
@@ -156,7 +152,6 @@ export default function App() {
   }, [messages, chat.length, ask]);
 
   const stats = useMemo(() => shiftStats(messages, demo, now), [messages, demo, now]);
-  const batch = useMemo(() => safeBatch(messages, demo), [messages, demo]);
   const counts = useMemo(() => countByFilter(messages), [messages]);
   const queue = useMemo(
     () =>
@@ -215,31 +210,20 @@ export default function App() {
     );
   }
 
-  async function askAbout(m: Message, text: string, redo: boolean) {
+  async function askAbout(m: Message, text: string) {
     const thread = threadFor(threads, m, demo);
     const history: AgentTurn[] = thread.turns.slice(-8).map((x) => ({ role: x.role, text: x.text }));
-    if (!redo) setThreads((t) => addHostTurn(t, m, demo, text));
+    setThreads((t) => addHostTurn(t, m, demo, text));
     setWsBusy(true);
     try {
-      const reply = await api.agent(text, redo ? [] : history, agentState(messages, demo), m.id);
-      setThreads((t) => addReply(t, m, demo, reply, redo));
+      const reply = await api.agent(text, history, agentState(messages, demo), m.id);
+      setThreads((t) => addReply(t, m, demo, reply));
       if (reply.ai_left_today !== null) setAiLeft(reply.ai_left_today);
     } catch (e) {
-      setThreads((t) => addReply(t, m, demo, errorReply((e as Error).message), false));
+      setThreads((t) => addReply(t, m, demo, errorReply((e as Error).message)));
     } finally {
       setWsBusy(false);
     }
-  }
-
-  function runBatch() {
-    setDemo((d) => applySafeBatch(d, batch));
-    setConfirmBatch(false);
-    const tasks = batch.tasks.length;
-    setToast(
-      `Sent ${batch.replies.length} confident replies` +
-        (tasks ? ` and created ${tasks} task${tasks === 1 ? "" : "s"}` : "") +
-        ` (demo). ${batch.leftForHost} still need you.`,
-    );
   }
 
   async function paste(body: string, guest: string, propertyId: number | null) {
@@ -297,8 +281,8 @@ export default function App() {
         <div>
           <h1>Guest Inbox Assistant</h1>
           <p className="muted">
-            Every guest message arrives sorted, drafted and planned by AI. Open one, check the
-            suggested actions, approve.
+            Every guest message arrives sorted and reviewed by AI, with a plan. Open one, agree to
+            the plan, then go through it step by step.
           </p>
         </div>
         <div className="header-tags">
@@ -333,15 +317,6 @@ export default function App() {
           </button>
           <button
             type="button"
-            className="btn btn-secondary"
-            onClick={() => setConfirmBatch(true)}
-            disabled={batch.replies.length === 0}
-            title="Send every high-confidence reply and create its task. Unsure ones stay for you."
-          >
-            Approve all safe ones ({batch.replies.length})
-          </button>
-          <button
-            type="button"
             className="link small"
             onClick={reset}
             title="Clear your statuses, tasks and chats (saved only in this browser)"
@@ -351,21 +326,6 @@ export default function App() {
         </div>
       </section>
 
-      {confirmBatch && (
-        <div className="confirm" role="alertdialog" aria-label="Approve all safe ones">
-          <span>
-            Send {batch.replies.length} high-confidence replies
-            {batch.tasks.length ? ` and create ${batch.tasks.length} tasks` : ""}?{" "}
-            {batch.leftForHost} unsure or unfinished ones stay for you.
-          </span>
-          <button type="button" className="btn btn-small" onClick={runBatch}>
-            Yes, approve
-          </button>
-          <button type="button" className="link small" onClick={() => setConfirmBatch(false)}>
-            Cancel
-          </button>
-        </div>
-      )}
       {toast && (
         <p className="toast" role="status">
           {toast}{" "}
@@ -488,26 +448,20 @@ export default function App() {
                 setShift(false);
               }}
               onNext={next ? goNext : null}
+              onAgree={() => setThreads((t) => agreePlan(t, open, demo))}
               onApprove={(p) => approveProposals(open, [p])}
-              onApproveAll={() =>
-                approveProposals(
-                  open,
-                  threadFor(threads, open, demo).proposals.filter((p) => p.state === "pending"),
-                )
-              }
               onChange={(p, change) => setThreads((t) => setProposal(t, open, demo, p.pid, change))}
               onDismiss={(p) =>
                 setThreads((t) => setProposal(t, open, demo, p.pid, { state: "dismissed" }))
               }
               onStatus={(s) => setDemo((d) => setStatus(d, open, s))}
-              onAsk={(text) => void askAbout(open, text, false)}
-              onRedo={() => void askAbout(open, REDO_TEXT, true)}
+              onAsk={(text) => void askAbout(open, text)}
               now={now}
             />
           ) : (
             <div className="overview">
               <p className="overview-hint muted small">
-                Open a message to see the AI&apos;s suggested actions, or ask about the whole inbox
+                Open a message to see the AI&apos;s review and plan, or ask about the whole inbox
                 here.
               </p>
               <ChatView

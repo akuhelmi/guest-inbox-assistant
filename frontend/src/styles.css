@@ -976,7 +976,6 @@ h3 {
   flex-wrap: wrap;
 }
 
-.confirm,
 .toast {
   display: flex;
   gap: 10px;
@@ -985,11 +984,6 @@ h3 {
   margin: 0 0 12px;
   padding: 10px 14px;
   border-radius: 10px;
-}
-
-.confirm {
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
 }
 
 .toast {
@@ -1095,21 +1089,107 @@ h3 {
   flex-wrap: wrap;
 }
 
-.ws-section-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-top: 4px;
+.review {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--brand);
+  border-radius: 10px;
+  padding: 10px 14px;
 }
 
-.ws-section-head h3 {
+.review h3,
+.review h4 {
+  margin: 0 0 4px;
+}
+
+.review h4 {
+  margin-top: 10px;
+  font-size: 0.9rem;
+}
+
+.review p {
   margin: 0;
 }
 
-.ws-status {
+.plan {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.plan-step {
+  counter-increment: step;
   display: flex;
-  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: 6px;
+}
+
+.plan-step::before {
+  content: counter(step) ".";
+  min-width: 1.2em;
+  color: var(--muted);
+}
+
+.plan-mark {
+  min-width: 0.9em;
+  color: var(--brand);
+  font-weight: 600;
+}
+
+.plan-approved,
+.plan-dismissed {
+  color: var(--muted);
+}
+
+.plan-dismissed {
+  text-decoration: line-through;
+}
+
+.plan-now {
+  background: var(--brand-soft);
+  font-weight: 600;
+}
+
+.review-actions {
+  display: flex;
   gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.step-done {
+  margin: 0;
+  color: var(--muted);
+}
+
+.step-approved {
+  color: var(--brand);
+}
+
+.step-count {
+  margin: 0 0 4px;
+}
+
+.step-end {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--brand-soft);
+}
+
+.ws-more summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.ws-more .status-control {
+  margin-top: 6px;
 }
 
 .ws-tasks p {

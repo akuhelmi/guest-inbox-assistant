@@ -1,6 +1,7 @@
 /**
- * The open message's workspace: the AI's proposed actions (reply, task, status) and a short
- * conversation about that message. Saved in this browser only, like the rest of the demo.
+ * The open message's workspace: a short review, a numbered plan of steps (reply, task, status)
+ * that the host agrees to, then one step at a time. Saved in this browser only, like the rest
+ * of the demo.
  */
 import type { AgentCard, AgentReply, Message, TaskSuggestion } from "../types";
 import { type CardState } from "./agent";
@@ -51,9 +52,14 @@ export interface ThreadTurn {
 }
 
 export interface Thread {
+  /** The steps of the plan, in order. */
   proposals: Proposal[];
   turns: ThreadTurn[];
+  /** The host pressed "Agree & proceed": the steps now come one at a time. */
+  agreed?: boolean;
 }
+
+const KIND_ORDER: Record<string, number> = { draft: 0, task: 1, status: 2 };
 
 export type Threads = Record<string, Thread>;
 
@@ -96,7 +102,9 @@ export function savedProposals(m: Message, demo: DemoState): AgentCard[] {
     cards.push({ ...baseCard(m), kind: "task", task });
   }
   if (status !== "done") {
-    cards.push({ ...baseCard(m), kind: "status", status: status === "new" ? "replied" : "done" });
+    // A simple question is finished once answered; one with follow-up work waits as Replied.
+    const target = status === "new" && cards.some((c) => c.kind === "task") ? "replied" : "done";
+    cards.push({ ...baseCard(m), kind: "status", status: target });
   }
   return cards;
 }
@@ -126,28 +134,68 @@ export function addHostTurn(threads: Threads, m: Message, demo: DemoState, text:
 }
 
 /**
- * Add the AI's answer to the thread. With `replace`, its cards replace the pending proposals
- * ("Redo with AI"); otherwise they are added to them. Approved ones always stay.
+ * Add the AI's answer to the thread. When the answer is a whole plan (`reply.plan`), its cards
+ * replace every step not done yet (so the host can drop a step). Otherwise a new card replaces
+ * the pending step of the same kind and other new cards become new steps. Finished steps never
+ * change. Pending steps stay in plan order: reply, task, status.
  */
 export function addReply(
   threads: Threads,
   m: Message,
   demo: DemoState,
   reply: AgentReply,
-  replace: boolean,
   now: number = Date.now(),
 ): Threads {
   const t = threadFor(threads, m, demo);
-  const fresh = toProposals(
-    reply.cards.filter((c) => c.message_id === m.id),
-    reply.by,
-    now,
-  );
-  const kept = replace ? t.proposals.filter((p) => p.state === "approved") : t.proposals;
+  const seen = new Set<string>();
+  const cards = reply.cards.filter((c) => {
+    if (c.message_id !== m.id || seen.has(c.kind)) return false;
+    seen.add(c.kind);
+    return true;
+  });
+  const fresh = toProposals(cards, reply.by, now);
+  const finished = t.proposals.filter((p) => p.state !== "pending");
+  const pending = [
+    ...t.proposals.filter((p) => p.state === "pending" && !reply.plan && !seen.has(p.kind)),
+    ...fresh,
+  ].sort((a, b) => (KIND_ORDER[a.kind] ?? 9) - (KIND_ORDER[b.kind] ?? 9));
   return put(threads, m, {
-    proposals: [...kept, ...fresh],
+    ...t,
+    proposals: [...finished, ...pending],
     turns: [...t.turns, { role: "assistant", text: reply.text, by: reply.by, note: reply.note }],
   });
+}
+
+export function agreePlan(threads: Threads, m: Message, demo: DemoState): Threads {
+  return put(threads, m, { ...threadFor(threads, m, demo), agreed: true });
+}
+
+/** The step waiting for the host, or null when the plan is finished. */
+export function currentStep(thread: Thread): Proposal | null {
+  return thread.proposals.find((p) => p.state === "pending") ?? null;
+}
+
+/** One line per step for the plan, e.g. "Reply to Priya on Airbnb". */
+export function stepTitle(p: Proposal, m: Message): string {
+  if (p.kind === "draft") return `Reply to ${m.guest_name} on ${sendLabel(m.channel).replace("Send on ", "")}`;
+  if (p.kind === "status") {
+    const label = p.status === "done" ? "Done" : p.status === "new" ? "New" : "Replied";
+    return `Move the message to ${label}`;
+  }
+  const task = p.task;
+  if (!task) return "Create a task";
+  const who = TEAM[task.assignee];
+  return who
+    ? `Create a task for ${who.name} and notify them: ${task.title}`
+    : `Add a task for yourself: ${task.title}`;
+}
+
+/** What the message is about, in a sentence or two, from its saved triage. */
+export function reviewText(m: Message): string {
+  const t = m.triage;
+  const head = `${t.urgent ? "Urgent. " : ""}${t.category_label} from ${m.guest_name} (${channelLabel(m.channel)}, ${m.property_name}).`;
+  const extra = t.needs_host ? " The AI isn't sure about the answer: check the reply before it goes." : "";
+  return `${head} ${t.reason}${extra}`;
 }
 
 export function setProposal(

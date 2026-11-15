@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { msg } from "./test-data";
-import { applySafeBatch, inView, nextInQueue, queueSort, safeBatch, shiftStats } from "./queue";
-import { EMPTY_STATE, addTask, setStatus, statusOf } from "./workflow";
+import { inView, nextInQueue, queueSort, shiftStats } from "./queue";
+import { EMPTY_STATE, addTask, setStatus } from "./workflow";
 
 const NOW = Date.parse("2026-11-14T10:00:00Z");
 
@@ -43,21 +43,5 @@ describe("queue", () => {
       needsHost: 1,
       openTasks: 1,
     });
-  });
-});
-
-describe("approve all safe ones", () => {
-  it("takes confident drafts only and leaves unsure ones for the host", () => {
-    const batch = safeBatch(ALL, EMPTY_STATE);
-    expect(batch.replies.map((m) => m.id)).toEqual([5]);
-    expect(batch.tasks.map((m) => m.id)).toEqual([5]);
-    expect(batch.leftForHost).toBe(4);
-  });
-
-  it("marks them replied and creates their tasks", () => {
-    const demo = applySafeBatch(EMPTY_STATE, safeBatch(ALL, EMPTY_STATE), NOW);
-    expect(statusOf(confidentTask, demo).status).toBe("replied");
-    expect(demo.tasks.map((t) => t.title)).toEqual(["Fix tap"]);
-    expect(safeBatch(ALL, demo).replies).toEqual([]);
   });
 });

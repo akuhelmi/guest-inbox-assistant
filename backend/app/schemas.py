@@ -137,3 +137,5 @@ class AgentOut(BaseModel):
     by: str
     ai_left_today: int | None = None
     note: str | None = None
+    # The cards are the whole remaining plan for the open message (they replace its open steps).
+    plan: bool = False

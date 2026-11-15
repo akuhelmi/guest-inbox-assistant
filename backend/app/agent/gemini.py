@@ -57,9 +57,12 @@ Conversation so far:
 {history}
 Host: {text}"""
 
-FOCUS = """The host has message #{id} ({guest}) open. Answer about it and propose actions for it
-unless the host clearly asks about something else. When asked what to do, propose the full set:
-a reply draft (if it still needs one), a task if the team must act, and the next status.
+FOCUS = """The host has message #{id} ({guest}) open and works through a plan of steps for it
+(reply, task, status). Answer about it unless the host clearly asks about something else.
+Whenever you propose cards for it, return the WHOLE plan still to do, in order: a reply draft
+(if it still needs one), a task if the team must act, and the next status. Your cards replace
+the steps not done yet, so keep the steps the host didn't ask to change, and leave out a step
+the host wants dropped.
 """
 
 ACTION_SCHEMA = {
@@ -200,6 +203,7 @@ def parse_data(data: object, item: AgentInput, by: str) -> AgentReply:
         highlight=highlight,
         focus=focus if focus in known else None,
         by=by,
+        plan=item.focus_id is not None and any(c.message_id == item.focus_id for c in cards),
     )
 
 

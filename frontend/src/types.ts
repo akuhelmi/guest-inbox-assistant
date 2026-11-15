@@ -108,6 +108,8 @@ export interface AgentReply {
   by: string;
   ai_left_today: number | null;
   note: string | null;
+  /** The cards are the whole remaining plan for the open message. */
+  plan?: boolean;
 }
 
 export interface AgentTurn {
