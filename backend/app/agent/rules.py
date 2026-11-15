@@ -139,6 +139,10 @@ class RulesAgent:
         items = item.items
         new = [i for i in items if i.status == "new"]
 
+        target = item.item(item.focus_id) if item.focus_id is not None else None
+        if target is not None:
+            return self.for_message(text, target, item)
+
         if not text or _has(text, "brief", "briefing", "start of shift"):
             return self.briefing(item)
         if _has(text, "help", "what can you do", "commands"):
@@ -213,6 +217,44 @@ class RulesAgent:
         return AgentReply(text="I didn't catch that. " + HELP)
 
     # --- answers -------------------------------------------------------------------------
+
+    def for_message(self, text: str, target: InboxItem, item: AgentInput) -> AgentReply:
+        """The host has one message open: propose actions for it, or answer about it."""
+        if not text or _has(text, "suggest", "propose", "redo", "again", "what should", "handle"):
+            return self.proposals(target)
+        prop = item.prop(target.property_id)
+        keys = matching_facts(text, prop.facts) if prop else []
+        if prop and keys and not _has(text, "draft", "reply", "task", "mark"):
+            lines = [f"- {FACT_LABELS[k]}: {prop.facts[k]}" for k in keys]
+            return AgentReply(
+                text=f"{prop.name}, from its fact sheet:\n" + "\n".join(lines),
+                highlight=(target.id,),
+                focus=target.id,
+            )
+        return self.about_guests(text, [target])
+
+    def proposals(self, target: InboxItem) -> AgentReply:
+        cards: list[Card] = []
+        if target.status == "new":
+            cards.append(draft_card(target))
+        task = task_card(target)
+        if task:
+            cards.append(task)
+        cards.append(
+            Card(
+                kind="status",
+                message_id=target.id,
+                status="done" if target.status == "replied" else "replied",
+            )
+        )
+        lead = (
+            "I'm not sure enough to answer this alone: check the draft before sending."
+            if target.needs_host
+            else "Here's what I'd do. Edit anything, then approve."
+        )
+        return AgentReply(
+            text=lead, cards=tuple(cards[:MAX_CARDS]), highlight=(target.id,), focus=target.id
+        )
 
     def briefing(self, item: AgentInput) -> AgentReply:
         stats = summary_stats(item.items, sum(len(i.open_tasks) for i in item.items))

@@ -52,9 +52,15 @@ Inbox (id | guest | property | topic | urgent | status | wait | needs host | lan
 tasks | saved task suggestion):
 {inbox}
 
+{focus}
 Conversation so far:
 {history}
 Host: {text}"""
+
+FOCUS = """The host has message #{id} ({guest}) open. Answer about it and propose actions for it
+unless the host clearly asks about something else. When asked what to do, propose the full set:
+a reply draft (if it still needs one), a task if the team must act, and the next status.
+"""
 
 ACTION_SCHEMA = {
     "type": "OBJECT",
@@ -105,7 +111,10 @@ def build_prompt(item: AgentInput) -> str:
         f"{'Host' if t.role == 'host' else 'Assistant'}: {t.text[:600]}" for t in item.history
     )
     stats = summary_stats(item.items, sum(len(i.open_tasks) for i in item.items))
+    target = item.item(item.focus_id) if item.focus_id is not None else None
+    focus = FOCUS.format(id=target.id, guest=target.guest_name) if target else ""
     return PROMPT.format(
+        focus=focus,
         max_cards=MAX_CARDS,
         stats=json.dumps(stats),
         facts=facts or "(none)",

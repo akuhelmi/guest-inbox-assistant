@@ -60,6 +60,8 @@ export interface Message {
   /** Starting status of the demo data; the visitor's own changes live in the browser. */
   status: Status;
   replied_at: string | null;
+  /** Where the guest wrote from: airbnb, booking or direct. */
+  channel: string;
 }
 
 export interface LiveTriage {

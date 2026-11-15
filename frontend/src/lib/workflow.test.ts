@@ -35,6 +35,7 @@ function msg(
     body: "text",
     status: "new",
     replied_at: null,
+    channel: "airbnb",
     triage: {
       category: "maintenance",
       category_label: "Maintenance",

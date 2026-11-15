@@ -18,3 +18,4 @@ frontend/dist/
 # Tools
 .vercel/
 .DS_Store
+*.tsbuildinfo

@@ -721,41 +721,7 @@ h3 {
   font: inherit;
 }
 
-/* v2: chat-first layout with the inbox assistant */
-.page-wide {
-  max-width: 1320px;
-}
-
-.shell {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 420px;
-  gap: 16px;
-  height: calc(100vh - 150px);
-  min-height: 560px;
-}
-
-.chat-col,
-.side-col {
-  min-height: 0;
-  height: 100%;
-}
-
-.side-col {
-  overflow-y: auto;
-}
-
-.side-col .list {
-  max-height: none;
-}
-
-.side-col .detail {
-  padding: 14px;
-}
-
-.back {
-  margin-bottom: 8px;
-}
-
+/* v2: chat styles (Ask panel and message threads) */
 .chat {
   display: flex;
   flex-direction: column;
@@ -958,35 +924,263 @@ h3 {
   box-shadow: inset 0 0 0 1px var(--brand);
 }
 
-.pane-switch {
-  display: none;
+/* v3: inbox-first work queue with the message workspace on the right */
+.page-full {
+  max-width: none;
+  padding: 16px 24px 32px;
+}
+
+.shiftbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+
+.stats {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.stat {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  font-size: 0.88rem;
+}
+
+.stat-urgent strong {
+  color: var(--urgent);
+}
+
+.stat-overdue strong {
+  color: #b45309;
+}
+
+.stat-host strong {
+  color: #6d28d9;
+}
+
+.shiftbar-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.confirm,
+.toast {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+}
+
+.confirm {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+}
+
+.toast {
+  background: var(--brand-soft);
+  border: 1px solid var(--brand);
+}
+
+.shell2 {
+  display: grid;
+  grid-template-columns: minmax(340px, 2fr) minmax(0, 3fr);
+  gap: 16px;
+  height: calc(100vh - 210px);
+  min-height: 560px;
+}
+
+.queue-col,
+.panel-col {
+  min-height: 0;
+  height: 100%;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.queue-col {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  overflow: hidden;
+}
+
+.queue-col .list {
+  flex: 1;
+  max-height: none;
+  overflow-y: auto;
+}
+
+.panel-col {
+  overflow: hidden;
+}
+
+.panel-col .chat {
+  border: 0;
+  border-radius: 0;
+  height: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.overview {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.overview-hint {
+  margin: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.ws-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ws-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ws-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ws-head h2,
+.ws-head p {
+  margin: 0;
+}
+
+.ws-head-tags {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ws-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 4px;
+}
+
+.ws-section-head h3 {
+  margin: 0;
+}
+
+.ws-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ws-tasks p {
+  margin: 2px 0;
+}
+
+.ws-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--line);
+}
+
+.bubble-plain {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.ws-composer {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.channel {
+  font-size: 0.75rem;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.channel-airbnb {
+  color: #be123c;
+  border-color: #fecdd3;
+}
+
+.channel-booking {
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+
+.channel-direct {
+  color: #15803d;
+  border-color: #bbf7d0;
 }
 
 @media (max-width: 900px) {
-  .pane-switch {
-    display: flex;
-    width: fit-content;
-    margin-bottom: 10px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    overflow: hidden;
-    background: var(--card);
+  .page-full {
+    padding: 12px 10px 24px;
   }
 
-  .shell {
+  .shell2 {
     grid-template-columns: 1fr;
     height: auto;
     min-height: 0;
   }
 
-  .shell-chat .side-col,
-  .shell-side .chat-col {
+  .queue-col {
+    max-height: none;
+  }
+
+  .shell2:not(.has-open) .panel-col,
+  .shell2.has-open .queue-col {
     display: none;
   }
 
-  .chat {
-    height: calc(100vh - 200px);
-    min-height: 460px;
+  .panel-col {
+    height: calc(100vh - 120px);
   }
 
   .bubble {

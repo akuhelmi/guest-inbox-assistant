@@ -109,6 +109,7 @@ def _message_out(m: Message, clock: timedelta = timedelta(0)) -> MessageOut:
         status=m.status or "new",
         replied_at=m.replied_at + shift if m.replied_at else None,
         body=m.body,
+        channel=m.channel or "airbnb",
         triage=_from_result(_saved_result(m)),
     )
 
@@ -187,7 +188,11 @@ def agent_input(
         for p in session.scalars(select(Property).order_by(Property.id))
     )
     history = tuple(Turn(t.role, t.text) for t in payload.history[-8:])
-    return AgentInput(text=text, items=tuple(items), properties=props, history=history)
+    known = {i.id for i in items}
+    focus = payload.message_id if payload.message_id in known else None
+    return AgentInput(
+        text=text, items=tuple(items), properties=props, history=history, focus_id=focus
+    )
 
 
 def _card_out(c: Card, item: AgentInput) -> CardOut:

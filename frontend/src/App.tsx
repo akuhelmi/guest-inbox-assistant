@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import { type CardEdit, ChatView } from "./chat-ui";
-import { FactSheet, MessageRow, TriagePanel } from "./components";
+import { MessageRow } from "./components";
 import {
   type ChatEntry,
   agentState,
@@ -10,17 +10,39 @@ import {
   entryId,
   historyFor,
   isAi,
-  latestHighlight,
   loadChat,
   providerLabel,
   saveChat,
   setCardState,
 } from "./lib/agent";
-import { countByFilter, filterMessages, timeAgo } from "./lib/inbox";
+import { countByFilter, filterMessages } from "./lib/inbox";
+import {
+  type Proposal,
+  type Threads,
+  addHostTurn,
+  addReply,
+  channelLabel,
+  ensureThread,
+  loadThreads,
+  resultText,
+  saveThreads,
+  setProposal,
+  threadFor,
+} from "./lib/proposals";
+import {
+  QUEUE_VIEWS,
+  type QueueView,
+  applySafeBatch,
+  inView,
+  nextInQueue,
+  queueSort,
+  safeBatch,
+  shiftStats,
+} from "./lib/queue";
 import {
   type DemoState,
   EMPTY_STATE,
-  addTask,
+  STATUS_LABELS,
   loadState,
   messageKey,
   saveState,
@@ -28,16 +50,15 @@ import {
   statusOf,
   tasksFor,
   toggleTask,
-  STATUS_LABELS,
   waitInfo,
 } from "./lib/workflow";
-import type { AgentReply, Filter, LiveTriage, Message, Meta, Property, Status } from "./types";
-import { StatusControl, TaskSuggestionCard, TasksView, WaitChip } from "./workflow-ui";
+import type { AgentReply, AgentTurn, Filter, LiveTriage, Message, Meta, Property } from "./types";
+import { TasksView, WaitChip } from "./workflow-ui";
+import { MessageWorkspace } from "./workspace-ui";
 
 type View = "inbox" | "tasks";
-type StatusFilter = "any" | Status;
-/** On a phone only one pane shows at a time. */
-type Pane = "chat" | "side";
+
+const REDO_TEXT = "Suggest the best actions for this message.";
 
 function errorReply(message: string): AgentReply {
   return {
@@ -60,7 +81,7 @@ function browserStorage(): Storage | undefined {
 }
 
 const FILTERS: { key: Filter; label: string }[] = [
-  { key: "all", label: "All" },
+  { key: "all", label: "All topics" },
   { key: "urgent", label: "Urgent" },
   { key: "needs_host", label: "Needs host" },
   { key: "check_in", label: "Check-in" },
@@ -74,21 +95,26 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [properties, setProperties] = useState<Property[]>([]);
-  const [filter, setFilter] = useState<Filter>("all");
-  const [detailId, setDetailId] = useState<number | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [demo, setDemo] = useState<DemoState>(() => loadState(browserStorage()));
   const [chat, setChat] = useState<ChatEntry[]>(() => loadChat(browserStorage()));
+  const [threads, setThreads] = useState<Threads>(() => loadThreads(browserStorage()));
   const [busy, setBusy] = useState(false);
+  const [wsBusy, setWsBusy] = useState(false);
   const [aiLeft, setAiLeft] = useState<number | null>(null);
   const [view, setView] = useState<View>("inbox");
-  const [pane, setPane] = useState<Pane>("chat");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("any");
+  const [queueView, setQueueView] = useState<QueueView>("todo");
+  const [filter, setFilter] = useState<Filter>("all");
+  const [openId, setOpenId] = useState<number | null>(null);
+  const [shift, setShift] = useState(false);
+  const [confirmBatch, setConfirmBatch] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const briefed = useRef(false);
 
   useEffect(() => saveState(browserStorage(), demo), [demo]);
   useEffect(() => saveChat(browserStorage(), chat), [chat]);
+  useEffect(() => saveThreads(browserStorage(), threads), [threads]);
 
   // Keep the waiting times moving.
   useEffect(() => {
@@ -107,16 +133,12 @@ export default function App() {
   }, []);
 
   const ask = useCallback(
-    async (text: string, history: ReturnType<typeof historyFor>) => {
+    async (text: string, history: AgentTurn[]) => {
       setBusy(true);
       try {
         const reply = await api.agent(text, history, agentState(messages, demo));
         setChat((c) => [...c, assistantEntry(reply)]);
         if (reply.ai_left_today !== null) setAiLeft(reply.ai_left_today);
-        if (reply.focus !== null) {
-          setView("inbox");
-          setDetailId(reply.focus);
-        }
       } catch (e) {
         setChat((c) => [...c, assistantEntry(errorReply((e as Error).message))]);
       } finally {
@@ -126,39 +148,98 @@ export default function App() {
     [messages, demo],
   );
 
-  // Opening briefing: the assistant starts the shift with a summary (free, no AI call).
+  // Opening briefing in the Ask panel (free, no AI call).
   useEffect(() => {
     if (briefed.current || messages.length === 0 || chat.length > 0) return;
     briefed.current = true;
     void ask("", []);
   }, [messages, chat.length, ask]);
 
-  const highlight = useMemo(() => new Set(latestHighlight(chat)), [chat]);
-  const visible = useMemo(
-    () =>
-      filterMessages(messages, filter).filter(
-        (m) => statusFilter === "any" || statusOf(m, demo).status === statusFilter,
-      ),
-    [messages, filter, statusFilter, demo],
-  );
+  const stats = useMemo(() => shiftStats(messages, demo, now), [messages, demo, now]);
+  const batch = useMemo(() => safeBatch(messages, demo), [messages, demo]);
   const counts = useMemo(() => countByFilter(messages), [messages]);
-  const statusCounts = useMemo(() => {
-    const c: Record<StatusFilter, number> = {
-      any: messages.length,
-      new: 0,
-      replied: 0,
-      done: 0,
-    };
-    for (const m of messages) c[statusOf(m, demo).status] += 1;
+  const queue = useMemo(
+    () =>
+      queueSort(filterMessages(messages, filter), demo, now).filter((m) =>
+        inView(m, demo, queueView),
+      ),
+    [messages, filter, demo, now, queueView],
+  );
+  const viewCounts = useMemo(() => {
+    const c: Record<QueueView, number> = { todo: 0, replied: 0, done: 0, all: messages.length };
+    for (const m of messages) {
+      const s = statusOf(m, demo).status;
+      c[s === "new" ? "todo" : s] += 1;
+    }
     return c;
   }, [messages, demo]);
-  const openTasks = demo.tasks.filter((t) => !t.done).length;
-  const detail = messages.find((m) => m.id === detailId) ?? null;
+  const open = messages.find((m) => m.id === openId) ?? null;
+  const next = open ? nextInQueue(messages, demo, open.id, now) : null;
 
-  function send(text: string) {
-    const history = historyFor(chat);
-    setChat((c) => [...c, { id: entryId(), role: "host", text, at: Date.now() }]);
-    void ask(text, history);
+  function openMessage(id: number) {
+    const m = messages.find((x) => x.id === id);
+    if (!m) return;
+    setThreads((t) => ensureThread(t, m, demo));
+    setView("inbox");
+    setOpenId(id);
+  }
+
+  function goNext() {
+    const next = nextInQueue(messages, demo, openId, now);
+    if (next) openMessage(next.id);
+    else {
+      setOpenId(null);
+      setShift(false);
+      setToast("Inbox clear: every guest has a reply. Nice shift.");
+    }
+  }
+
+  function startShift() {
+    setShift(true);
+    setToast(null);
+    const first = nextInQueue(messages, demo, null, now);
+    if (first) openMessage(first.id);
+    else setToast("Nothing waiting: every guest has a reply.");
+  }
+
+  function approveProposals(m: Message, picked: Proposal[]) {
+    setDemo((d) =>
+      picked.reduce((acc, p) => applyCard(acc, p, messages, { task: p.task ?? undefined }), d),
+    );
+    setThreads((t) =>
+      picked.reduce(
+        (acc, p) =>
+          setProposal(acc, m, demo, p.pid, { state: "approved", result: resultText(p, m.channel) }),
+        t,
+      ),
+    );
+  }
+
+  async function askAbout(m: Message, text: string, redo: boolean) {
+    const thread = threadFor(threads, m, demo);
+    const history: AgentTurn[] = thread.turns.slice(-8).map((x) => ({ role: x.role, text: x.text }));
+    if (!redo) setThreads((t) => addHostTurn(t, m, demo, text));
+    setWsBusy(true);
+    try {
+      const reply = await api.agent(text, redo ? [] : history, agentState(messages, demo), m.id);
+      setThreads((t) => addReply(t, m, demo, reply, redo));
+      if (reply.ai_left_today !== null) setAiLeft(reply.ai_left_today);
+    } catch (e) {
+      setThreads((t) => addReply(t, m, demo, errorReply((e as Error).message), false));
+    } finally {
+      setWsBusy(false);
+    }
+  }
+
+  function runBatch() {
+    setDemo((d) => applySafeBatch(d, batch));
+    setConfirmBatch(false);
+    const tasks = batch.tasks.length;
+    setToast(
+      `Sent ${batch.replies.length} confident replies` +
+        (tasks ? ` and created ${tasks} task${tasks === 1 ? "" : "s"}` : "") +
+        ` (demo). ${batch.leftForHost} still need you.`,
+    );
   }
 
   async function paste(body: string, guest: string, propertyId: number | null) {
@@ -185,28 +266,22 @@ export default function App() {
     }
   }
 
-  function approve(entry: string, indexes: number[], edits: Record<number, CardEdit>) {
+  function approveChat(entry: string, indexes: number[], edits: Record<number, CardEdit>) {
     const found = chat.find((e) => e.id === entry);
     if (!found || found.role !== "assistant") return;
     setDemo((d) =>
-      indexes.reduce(
-        (acc, i) => applyCard(acc, found.cards[i], messages, edits[i] ?? {}),
-        d,
-      ),
+      indexes.reduce((acc, i) => applyCard(acc, found.cards[i], messages, edits[i] ?? {}), d),
     );
     setChat((c) => setCardState(c, entry, indexes, "approved"));
-  }
-
-  function openMessage(id: number, showOnPhone = true) {
-    setView("inbox");
-    setDetailId(id);
-    if (showOnPhone) setPane("side");
   }
 
   function reset() {
     setDemo(EMPTY_STATE);
     setChat([]);
-    setDetailId(null);
+    setThreads({});
+    setOpenId(null);
+    setShift(false);
+    setToast(null);
     briefed.current = false;
   }
 
@@ -217,13 +292,13 @@ export default function App() {
     : "";
 
   return (
-    <div className="page page-wide">
+    <div className="page page-full">
       <header className="header">
         <div>
           <h1>Guest Inbox Assistant</h1>
           <p className="muted">
-            Run the guest inbox by talking to an assistant. It sorts, drafts and plans; you
-            approve every change.
+            Every guest message arrives sorted, drafted and planned by AI. Open one, check the
+            suggested actions, approve.
           </p>
         </div>
         <div className="header-tags">
@@ -234,60 +309,74 @@ export default function App() {
 
       {loadError && <p className="error">Could not load the inbox: {loadError}</p>}
 
-      <div className="pane-switch" role="tablist" aria-label="Show">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={pane === "chat"}
-          className={`seg${pane === "chat" ? " seg-on" : ""}`}
-          onClick={() => setPane("chat")}
-        >
-          Assistant
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={pane === "side" && view === "inbox"}
-          className={`seg${pane === "side" && view === "inbox" ? " seg-on" : ""}`}
-          onClick={() => {
-            setPane("side");
-            setView("inbox");
-          }}
-        >
-          Inbox {statusCounts.new}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={pane === "side" && view === "tasks"}
-          className={`seg${pane === "side" && view === "tasks" ? " seg-on" : ""}`}
-          onClick={() => {
-            setPane("side");
-            setView("tasks");
-          }}
-        >
-          Tasks {openTasks}
-        </button>
-      </div>
-
-      <main className={`shell shell-${pane}`}>
-        <div className="chat-col">
-          <ChatView
-            chat={chat}
-            busy={busy}
-            suggestions={meta?.suggestions ?? []}
-            properties={properties}
-            maxChars={meta?.max_message_chars ?? 1000}
-            aiLabel={aiLabel}
-            onSend={send}
-            onPaste={paste}
-            onApprove={approve}
-            onDismiss={(entry, i) => setChat((c) => setCardState(c, entry, [i], "dismissed"))}
-            onOpen={(id) => openMessage(id)}
-          />
+      <section className="shiftbar" aria-label="Shift">
+        <div className="stats">
+          <span className="stat">
+            <strong>{stats.waiting}</strong> waiting
+          </span>
+          <span className="stat stat-urgent">
+            <strong>{stats.urgent}</strong> urgent
+          </span>
+          <span className="stat stat-overdue">
+            <strong>{stats.overdue}</strong> overdue
+          </span>
+          <span className="stat stat-host">
+            <strong>{stats.needsHost}</strong> need you
+          </span>
+          <span className="stat">
+            <strong>{stats.openTasks}</strong> open tasks
+          </span>
         </div>
+        <div className="shiftbar-actions">
+          <button type="button" className="btn" onClick={startShift} disabled={!messages.length}>
+            Start shift
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setConfirmBatch(true)}
+            disabled={batch.replies.length === 0}
+            title="Send every high-confidence reply and create its task. Unsure ones stay for you."
+          >
+            Approve all safe ones ({batch.replies.length})
+          </button>
+          <button
+            type="button"
+            className="link small"
+            onClick={reset}
+            title="Clear your statuses, tasks and chats (saved only in this browser)"
+          >
+            Reset demo
+          </button>
+        </div>
+      </section>
 
-        <aside className="side-col">
+      {confirmBatch && (
+        <div className="confirm" role="alertdialog" aria-label="Approve all safe ones">
+          <span>
+            Send {batch.replies.length} high-confidence replies
+            {batch.tasks.length ? ` and create ${batch.tasks.length} tasks` : ""}?{" "}
+            {batch.leftForHost} unsure or unfinished ones stay for you.
+          </span>
+          <button type="button" className="btn btn-small" onClick={runBatch}>
+            Yes, approve
+          </button>
+          <button type="button" className="link small" onClick={() => setConfirmBatch(false)}>
+            Cancel
+          </button>
+        </div>
+      )}
+      {toast && (
+        <p className="toast" role="status">
+          {toast}{" "}
+          <button type="button" className="link small" onClick={() => setToast(null)}>
+            Close
+          </button>
+        </p>
+      )}
+
+      <main className={`shell2${open ? " has-open" : ""}`}>
+        <section className="queue-col">
           <div className="tabs">
             <div role="tablist" aria-label="View">
               <button
@@ -295,12 +384,9 @@ export default function App() {
                 role="tab"
                 className={`tab${view === "inbox" ? " tab-on" : ""}`}
                 aria-selected={view === "inbox"}
-                onClick={() => {
-                  setView("inbox");
-                  setDetailId(null);
-                }}
+                onClick={() => setView("inbox")}
               >
-                Inbox <span className="tab-badge">{statusCounts.new}</span>
+                Inbox <span className="tab-badge">{stats.waiting}</span>
               </button>
               <button
                 type="button"
@@ -309,17 +395,9 @@ export default function App() {
                 aria-selected={view === "tasks"}
                 onClick={() => setView("tasks")}
               >
-                Tasks <span className="tab-badge">{openTasks}</span>
+                Tasks <span className="tab-badge">{stats.openTasks}</span>
               </button>
             </div>
-            <button
-              type="button"
-              className="link small"
-              onClick={reset}
-              title="Clear the chat, your statuses and your tasks (saved only in this browser)"
-            >
-              Reset demo
-            </button>
           </div>
 
           {view === "tasks" ? (
@@ -331,35 +409,24 @@ export default function App() {
                 now={now}
                 findMessage={(t) => messages.find((m) => messageKey(m) === t.messageKey)}
               />
-              <p className="muted small">
-                Your chat, statuses and tasks are saved in this browser only, so other visitors
-                never see them.
-              </p>
             </section>
-          ) : detail ? (
-            <div className="detail">
-              <button type="button" className="link small back" onClick={() => setDetailId(null)}>
-                ← All messages
-              </button>
-              <MessageDetail
-                key={detail.id}
-                message={detail}
-                meta={meta}
-                property={properties.find((p) => p.id === detail.property_id)}
-                workflow={
-                  <Workflow
-                    message={detail}
-                    demo={demo}
-                    now={now}
-                    onStatus={(s) => setDemo((d) => setStatus(d, detail, s))}
-                    onTask={(t) => setDemo((d) => addTask(d, detail, t))}
-                  />
-                }
-              />
-            </div>
           ) : (
-            <div className="list-col">
-              <nav className="filters filters-compact" aria-label="Filter messages">
+            <>
+              <div className="list-head" role="group" aria-label="Show">
+                {QUEUE_VIEWS.map((v) => (
+                  <button
+                    key={v.key}
+                    type="button"
+                    className={`list-head-btn${queueView === v.key ? " list-head-on" : ""}`}
+                    onClick={() => setQueueView(v.key)}
+                    aria-pressed={queueView === v.key}
+                  >
+                    {v.label}
+                    <span className="list-head-count">{viewCounts[v.key]}</span>
+                  </button>
+                ))}
+              </div>
+              <nav className="filters filters-compact" aria-label="Filter by topic">
                 {FILTERS.map((f) => (
                   <button
                     key={f.key}
@@ -372,139 +439,103 @@ export default function App() {
                   </button>
                 ))}
               </nav>
-              <div className="list-head" role="group" aria-label="Filter by status">
-                {(["any", "new", "replied", "done"] as StatusFilter[]).map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    className={`list-head-btn${statusFilter === s ? " list-head-on" : ""}`}
-                    onClick={() => setStatusFilter(s)}
-                    aria-pressed={statusFilter === s}
-                  >
-                    {s === "any" ? "All" : STATUS_LABELS[s]}
-                    <span className="list-head-count">{statusCounts[s]}</span>
-                  </button>
-                ))}
-              </div>
               <ul className="list" aria-label="Guest messages">
-                {visible.map((m) => (
-                  <MessageRow
-                    key={m.id}
-                    message={m}
-                    selected={false}
-                    highlighted={highlight.has(m.id)}
-                    onSelect={() => openMessage(m.id, false)}
-                    extra={
-                      <>
-                        <span className={`status status-${statusOf(m, demo).status}`}>
-                          {STATUS_LABELS[statusOf(m, demo).status]}
-                        </span>
-                        <WaitChip wait={waitInfo(m, demo, now)} />
-                      </>
-                    }
-                  />
-                ))}
-                {visible.length === 0 && messages.length > 0 && (
-                  <li className="muted empty">No messages in this filter.</li>
+                {queue.map((m) => {
+                  const s = statusOf(m, demo).status;
+                  return (
+                    <MessageRow
+                      key={m.id}
+                      message={m}
+                      selected={m.id === openId}
+                      onSelect={() => openMessage(m.id)}
+                      extra={
+                        <>
+                          <span className={`channel channel-${m.channel}`}>
+                            {channelLabel(m.channel)}
+                          </span>
+                          <span className={`status status-${s}`}>{STATUS_LABELS[s]}</span>
+                          <WaitChip wait={waitInfo(m, demo, now)} />
+                        </>
+                      }
+                    />
+                  );
+                })}
+                {queue.length === 0 && messages.length > 0 && (
+                  <li className="muted empty">
+                    {queueView === "todo" ? "Nothing waiting here. Nice." : "No messages here."}
+                  </li>
                 )}
               </ul>
+            </>
+          )}
+        </section>
+
+        <aside className="panel-col">
+          {open ? (
+            <MessageWorkspace
+              key={open.id}
+              message={open}
+              property={properties.find((p) => p.id === open.property_id)}
+              status={statusOf(open, demo).status}
+              wait={waitInfo(open, demo, now)}
+              tasks={tasksFor(open, demo)}
+              thread={threadFor(threads, open, demo)}
+              busy={wsBusy}
+              aiLabel={aiLabel}
+              shift={shift ? { left: stats.waiting } : null}
+              onClose={() => {
+                setOpenId(null);
+                setShift(false);
+              }}
+              onNext={next ? goNext : null}
+              onApprove={(p) => approveProposals(open, [p])}
+              onApproveAll={() =>
+                approveProposals(
+                  open,
+                  threadFor(threads, open, demo).proposals.filter((p) => p.state === "pending"),
+                )
+              }
+              onChange={(p, change) => setThreads((t) => setProposal(t, open, demo, p.pid, change))}
+              onDismiss={(p) =>
+                setThreads((t) => setProposal(t, open, demo, p.pid, { state: "dismissed" }))
+              }
+              onStatus={(s) => setDemo((d) => setStatus(d, open, s))}
+              onAsk={(text) => void askAbout(open, text, false)}
+              onRedo={() => void askAbout(open, REDO_TEXT, true)}
+              now={now}
+            />
+          ) : (
+            <div className="overview">
+              <p className="overview-hint muted small">
+                Open a message to see the AI&apos;s suggested actions, or ask about the whole inbox
+                here.
+              </p>
+              <ChatView
+                chat={chat}
+                busy={busy}
+                suggestions={meta?.suggestions ?? []}
+                properties={properties}
+                maxChars={meta?.max_message_chars ?? 1000}
+                aiLabel={aiLabel}
+                onSend={(text) => {
+                  const history = historyFor(chat);
+                  setChat((c) => [...c, { id: entryId(), role: "host", text, at: Date.now() }]);
+                  void ask(text, history);
+                }}
+                onPaste={paste}
+                onApprove={approveChat}
+                onDismiss={(entry, i) => setChat((c) => setCardState(c, entry, [i], "dismissed"))}
+                onOpen={(id) => openMessage(id)}
+              />
             </div>
           )}
         </aside>
       </main>
 
       <footer className="footer muted small">
-        Demo app with invented properties and guests. Nothing is ever sent to a guest. AI-assisted
-        build, human-reviewed.
+        Demo app with invented properties and guests. Nothing is ever sent to a guest or a team
+        member. AI-assisted build, human-reviewed.
       </footer>
     </div>
   );
 }
-
-function Workflow({
-  message,
-  demo,
-  now,
-  onStatus,
-  onTask,
-}: {
-  message: Message;
-  demo: DemoState;
-  now: number;
-  onStatus: (s: Status) => void;
-  onTask: Parameters<typeof TaskSuggestionCard>[0]["onCreate"];
-}) {
-  return (
-    <>
-      <div className="workflow">
-        <StatusControl status={statusOf(message, demo).status} onChange={onStatus} />
-        <WaitChip wait={waitInfo(message, demo, now)} />
-      </div>
-      <TaskSuggestionCard
-        key={message.id}
-        suggestion={message.triage.suggested_task}
-        existing={tasksFor(message, demo)}
-        onCreate={onTask}
-        now={now}
-      />
-    </>
-  );
-}
-
-function MessageDetail({
-  message,
-  meta,
-  property,
-  workflow,
-}: {
-  message: Message;
-  meta: Meta | null;
-  property?: Property;
-  workflow: React.ReactNode;
-}) {
-  const [live, setLive] = useState<LiveTriage | null>(null);
-  const [runs, setRuns] = useState(0);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function rerun() {
-    setBusy(true);
-    setError(null);
-    try {
-      setLive(await api.retriage(message.id));
-      setRuns((n) => n + 1);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <article>
-      <div className="detail-head">
-        <div>
-          <h2>{message.guest_name}</h2>
-          <p className="muted small">
-            {message.property_name}, {message.property_city} · {timeAgo(message.received_at)}
-          </p>
-        </div>
-      </div>
-      <blockquote className="body">{message.body}</blockquote>
-      {workflow}
-      <TriagePanel triage={message.triage} title="Triage" />
-      <FactSheet property={property} triage={live?.triage ?? message.triage} />
-      <div className="actions">
-        <button type="button" className="btn btn-secondary" onClick={rerun} disabled={busy}>
-          {busy ? "Running…" : `Re-run live (${meta ? providerLabel(meta.provider) : "AI"})`}
-        </button>
-        {live && (
-          <span className="muted small">{live.calls_left_this_hour} live runs left this hour</span>
-        )}
-      </div>
-      {error && <p className="error">{error}</p>}
-      {live && <TriagePanel key={runs} triage={live.triage} title="Live result" fresh />}
-    </article>
-  );
-}
-

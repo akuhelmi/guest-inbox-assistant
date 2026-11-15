@@ -297,3 +297,49 @@ def test_api_daily_ai_limit_falls_back_to_rules():
 
     Base.metadata.drop_all(app.state.engine)
     app.state.engine.dispose()
+
+
+# --- one message open ------------------------------------------------------------------
+
+
+def ask_about(text: str, message_id: int) -> object:
+    return RulesAgent().respond(
+        AgentInput(text=text, items=ITEMS, properties=(PROP,), focus_id=message_id)
+    )
+
+
+def test_open_message_gets_reply_task_and_status_proposals():
+    reply = ask_about("", 1)
+    assert [c.kind for c in reply.cards] == ["draft", "task", "status"]
+    assert reply.cards[2].status == "replied" and reply.focus == 1
+
+
+def test_open_replied_message_proposes_done_without_a_draft():
+    reply = ask_about("suggest", 4)
+    assert [c.kind for c in reply.cards] == ["status"] and reply.cards[0].status == "done"
+
+
+def test_open_message_needing_host_says_so():
+    assert "not sure" in ask_about("", 3).text
+
+
+def test_open_message_commands_and_facts():
+    assert [c.kind for c in ask_about("mark it done", 2).cards] == ["status"]
+    assert "Network Sea" in ask_about("what's the wifi?", 2).text
+
+
+def test_prompt_names_the_open_message():
+    item = AgentInput(text="what now?", items=ITEMS, properties=(PROP,), focus_id=2)
+    assert "message #2 (Tom Hughes) open" in build_prompt(item)
+    assert "open. Answer about it" not in build_prompt(AGENT_INPUT)
+
+
+def test_api_messages_have_a_channel_and_agent_takes_message_id(client):
+    messages = client.get("/api/messages").json()
+    assert {m["channel"] for m in messages} == {"airbnb", "booking", "direct"}
+    first = messages[0]["id"]
+    data = client.post("/api/agent", json={"message_id": first}).json()
+    assert data["focus"] == first and data["cards"]
+    assert all(c["message_id"] == first for c in data["cards"])
+    unknown = client.post("/api/agent", json={"message_id": 99999}).json()
+    assert "waiting for a reply" in unknown["text"]

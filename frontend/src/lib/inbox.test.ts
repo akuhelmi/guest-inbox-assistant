@@ -21,6 +21,7 @@ function msg(id: number, category: Category, urgent: boolean, receivedAt: string
     body: "text",
     status: "new",
     replied_at: null,
+    channel: "airbnb",
     triage: {
       category,
       category_label: category,

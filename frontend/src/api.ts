@@ -38,9 +38,9 @@ export const api = {
       body: JSON.stringify({ body, guest_name: guestName, property_id: propertyId }),
     }),
   /** One turn with the inbox assistant. An empty text asks for the opening briefing. */
-  agent: (text: string, history: AgentTurn[], state: AgentStateIn) =>
+  agent: (text: string, history: AgentTurn[], state: AgentStateIn, messageId?: number) =>
     request<AgentReply>("/api/agent", {
       method: "POST",
-      body: JSON.stringify({ text, history, state }),
+      body: JSON.stringify({ text, history, state, message_id: messageId ?? null }),
     }),
 };

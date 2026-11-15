@@ -32,6 +32,7 @@ function msg(id: number, status: Message["status"] = "new"): Message {
     body: "text",
     status,
     replied_at: null,
+    channel: "airbnb",
     triage: {
       category: "maintenance",
       category_label: "Maintenance",

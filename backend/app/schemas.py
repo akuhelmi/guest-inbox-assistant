@@ -57,6 +57,7 @@ class MessageOut(BaseModel):
     triage: TriageOut
     status: str = "new"
     replied_at: datetime | None = None
+    channel: str = "airbnb"
 
 
 class TriageRequest(BaseModel):
@@ -107,6 +108,8 @@ class AgentState(BaseModel):
 
 class AgentRequest(BaseModel):
     text: str = Field(default="", max_length=500)
+    # The message the host has open: answers and proposals are about it.
+    message_id: int | None = None
     history: list[AgentTurn] = Field(default_factory=list, max_length=20)
     state: AgentState = Field(default_factory=AgentState)
 

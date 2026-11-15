@@ -63,6 +63,7 @@ class AgentInput:
     items: tuple[InboxItem, ...]
     properties: tuple[PropertyInfo, ...]
     history: tuple[Turn, ...] = ()
+    focus_id: int | None = None  # the message the host has open
 
     def item(self, message_id: int) -> InboxItem | None:
         return next((i for i in self.items if i.id == message_id), None)

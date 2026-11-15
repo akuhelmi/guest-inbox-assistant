@@ -19,10 +19,13 @@ from .db import Base, make_engine, make_session_factory
 from .models import AppMeta, Message, Property, RateHit
 from .seed_data import MESSAGES, PROPERTIES
 
+# Spread the fake messages over the booking channels.
+CHANNELS = ("airbnb", "booking", "airbnb", "direct")
+
 SAVED = "saved example"
 
 # Bump whenever the demo tables or the seed data change shape.
-DATA_VERSION = "3"  # 3: tasks, starting status, seeded_at
+DATA_VERSION = "4"  # 3: tasks, starting status, seeded_at; 4: channel
 
 # Tables kept across data versions: everything else is demo data and gets rebuilt.
 KEPT_TABLES = {AppMeta.__tablename__, RateHit.__tablename__}
@@ -54,7 +57,7 @@ def seed(session: Session, now: datetime | None = None) -> int:
         session.add(prop)
         props[p["key"]] = prop
     session.flush()
-    for m in MESSAGES:
+    for index, m in enumerate(MESSAGES):
         status, replied_after = starting_status(m)
         received = now - timedelta(minutes=m["minutes_ago"])
         session.add(
@@ -71,6 +74,7 @@ def seed(session: Session, now: datetime | None = None) -> int:
                 draft_reply=m["draft"],
                 triaged_by=SAVED,
                 language=m.get("language", "en"),
+                channel=m.get("channel") or CHANNELS[index % len(CHANNELS)],
                 confidence=m.get("confidence", "medium"),
                 facts_used=list(m.get("facts_used", [])),
                 task_title=m.get("task", {}).get("title", ""),

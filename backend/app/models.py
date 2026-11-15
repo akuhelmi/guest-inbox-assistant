@@ -37,6 +37,8 @@ class Message(Base):
     draft_reply: Mapped[str] = mapped_column(Text)
     triaged_by: Mapped[str] = mapped_column(String(40))
     language: Mapped[str] = mapped_column(String(8), default="en")
+    # Where the guest wrote from: airbnb, booking or direct (fake, for the demo).
+    channel: Mapped[str] = mapped_column(String(16), default="airbnb")
     confidence: Mapped[str] = mapped_column(String(8), default="medium")
     facts_used: Mapped[list] = mapped_column(JSON, default=list)
     task_title: Mapped[str] = mapped_column(String(120), default="")
