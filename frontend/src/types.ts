@@ -68,6 +68,33 @@ export interface Message {
   channel: string;
 }
 
+export interface ComposeResult {
+  /** id 0: the browser gives it its own (negative) id when added. */
+  message: Message;
+  by: string;
+  pasted: boolean;
+  ai_left_today: number | null;
+  note: string | null;
+}
+
+/** A visitor-added message as the assistant API takes it. */
+export interface ExtraMessageIn {
+  id: number;
+  guest_name: string;
+  property_id: number;
+  wait_minutes: number;
+  category: string;
+  urgent: boolean;
+  needs_host: boolean;
+  body: string;
+  draft_reply: string;
+  language: string;
+  confidence: string;
+  task_title: string;
+  task_assignee: string;
+  task_due_minutes: number;
+}
+
 export interface LiveTriage {
   triage: Triage;
   calls_left_this_hour: number;

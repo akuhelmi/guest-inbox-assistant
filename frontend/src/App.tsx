@@ -1,20 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
-import { type CardEdit, ChatView } from "./chat-ui";
+import { ComposePanel } from "./compose-ui";
 import { MessageRow } from "./components";
-import {
-  type ChatEntry,
-  agentState,
-  applyCard,
-  assistantEntry,
-  entryId,
-  historyFor,
-  isAi,
-  loadChat,
-  providerLabel,
-  saveChat,
-  setCardState,
-} from "./lib/agent";
+import { agentState, applyCard, isAi, providerLabel } from "./lib/agent";
+import { addExtra, extraPayload, loadExtra, saveExtra } from "./lib/extra";
 import { countByFilter, filterMessages } from "./lib/inbox";
 import {
   type Proposal,
@@ -56,7 +45,7 @@ import {
   toggleTask,
   waitInfo,
 } from "./lib/workflow";
-import type { AgentReply, AgentTurn, Filter, LiveTriage, Message, Meta, Property } from "./types";
+import type { AgentReply, AgentTurn, ComposeResult, Filter, Message, Meta, Property } from "./types";
 import {
   type Team,
   anchorOf,
@@ -105,7 +94,10 @@ const FILTERS: { key: Filter; label: string }[] = [
 ];
 
 export default function App() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  // Saved demo messages from the API, plus the ones this visitor added (browser only).
+  const [seeded, setSeeded] = useState<Message[]>([]);
+  const [extra, setExtra] = useState<Message[]>(() => loadExtra(browserStorage()));
+  const messages = useMemo(() => [...extra, ...seeded], [extra, seeded]);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [properties, setProperties] = useState<Property[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -114,7 +106,6 @@ export default function App() {
     return saved.startedAt ? saved : { ...saved, startedAt: Date.now() };
   });
   const [team, setTeam] = useState<Team>({ people: [], jobs: [] });
-  const [chat, setChat] = useState<ChatEntry[]>(() => loadChat(browserStorage()));
   const [threads, setThreads] = useState<Threads>(() => loadThreads(browserStorage()));
   const [busy, setBusy] = useState(false);
   const [wsBusy, setWsBusy] = useState(false);
@@ -123,14 +114,13 @@ export default function App() {
   const [queueView, setQueueView] = useState<QueueView>("todo");
   const [filter, setFilter] = useState<Filter>("all");
   const [openId, setOpenId] = useState<number | null>(null);
-  // Phones show one pane at a time: the inbox, a message, or the Ask panel.
+  // Phones show one pane at a time: the inbox, a message, or New guest message.
   const [askOpen, setAskOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const briefed = useRef(false);
 
   useEffect(() => saveState(browserStorage(), demo), [demo]);
-  useEffect(() => saveChat(browserStorage(), chat), [chat]);
+  useEffect(() => saveExtra(browserStorage(), extra), [extra]);
   useEffect(() => saveThreads(browserStorage(), threads), [threads]);
 
   // Keep the waiting times moving.
@@ -142,36 +132,13 @@ export default function App() {
   useEffect(() => {
     Promise.all([api.messages(), api.meta(), api.properties(), api.team()])
       .then(([msgs, m, props, t]) => {
-        setMessages(msgs);
+        setSeeded(msgs);
         setMeta(m);
         setProperties(props);
         setTeam(t);
       })
       .catch((e: Error) => setLoadError(e.message));
   }, []);
-
-  const ask = useCallback(
-    async (text: string, history: AgentTurn[]) => {
-      setBusy(true);
-      try {
-        const reply = await api.agent(text, history, agentState(messages, demo));
-        setChat((c) => [...c, assistantEntry(reply)]);
-        if (reply.ai_left_today !== null) setAiLeft(reply.ai_left_today);
-      } catch (e) {
-        setChat((c) => [...c, assistantEntry(errorReply((e as Error).message))]);
-      } finally {
-        setBusy(false);
-      }
-    },
-    [messages, demo],
-  );
-
-  // Opening briefing in the Ask panel (free, no AI call).
-  useEffect(() => {
-    if (briefed.current || messages.length === 0 || chat.length > 0) return;
-    briefed.current = true;
-    void ask("", []);
-  }, [messages, chat.length, ask]);
 
   const stats = useMemo(() => shiftStats(messages, demo, now), [messages, demo, now]);
   const counts = useMemo(() => countByFilter(messages), [messages]);
@@ -295,6 +262,7 @@ export default function App() {
         agentState(messages, demo),
         m.id,
         teamLines(team, slots, Date.now()),
+        extraPayload(extra, demo),
       );
       setThreads((t) => addReply(t, m, demo, reply, Date.now(), staff));
       if (reply.ai_left_today !== null) setAiLeft(reply.ai_left_today);
@@ -305,46 +273,38 @@ export default function App() {
     }
   }
 
-  async function paste(body: string, guest: string, propertyId: number | null) {
+  async function compose(brief: string, propertyId: number | null) {
     setBusy(true);
     try {
-      const result: LiveTriage = await api.triageText(body, guest, propertyId);
-      const prop = properties.find((p) => p.id === propertyId);
-      setChat((c) => [
-        ...c,
-        {
-          id: entryId(),
-          role: "pasted",
-          at: Date.now(),
-          guest,
-          propertyName: prop?.name ?? "our property",
-          body,
-          triage: result.triage,
-        },
-      ]);
+      const result = await api.compose(brief, propertyId);
+      if (result.ai_left_today !== null) setAiLeft(result.ai_left_today);
+      return result;
     } catch (e) {
-      setChat((c) => [...c, assistantEntry(errorReply((e as Error).message))]);
+      setToast(`Could not write the message: ${(e as Error).message}`);
+      return null;
     } finally {
       setBusy(false);
     }
   }
 
-  function approveChat(entry: string, indexes: number[], edits: Record<number, CardEdit>) {
-    const found = chat.find((e) => e.id === entry);
-    if (!found || found.role !== "assistant") return;
-    setDemo((d) =>
-      indexes.reduce((acc, i) => applyCard(acc, found.cards[i], messages, edits[i] ?? {}), d),
-    );
-    setChat((c) => setCardState(c, entry, indexes, "approved"));
+  function addComposed(result: ComposeResult) {
+    const received = new Date().toISOString().replace("Z", "");
+    const next = addExtra(extra, { ...result.message, received_at: received });
+    setExtra(next);
+    const added = next[0];
+    // Open it straight away, with its review and plan.
+    setThreads((t) => ensureThread(t, added, demo, staff));
+    setView("inbox");
+    setAskOpen(false);
+    setOpenId(added.id);
   }
 
   function reset() {
     setDemo({ ...EMPTY_STATE, startedAt: Date.now() });
-    setChat([]);
+    setExtra([]);
     setThreads({});
     setOpenId(null);
     setToast(null);
-    briefed.current = false;
   }
 
   const aiLabel = meta
@@ -395,13 +355,13 @@ export default function App() {
             className="btn btn-secondary phone-only"
             onClick={() => setAskOpen(true)}
           >
-            Ask the assistant
+            New guest message
           </button>
           <button
             type="button"
             className="link small"
             onClick={reset}
-            title="Clear your statuses, tasks and chats (saved only in this browser)"
+            title="Clear your statuses, tasks, added messages and threads (saved only in this browser)"
           >
             Reset demo
           </button>
@@ -548,35 +508,15 @@ export default function App() {
               onAsk={(text) => void askAbout(open, text)}
             />
           ) : (
-            <div className="overview">
-              <div className="ws-top phone-only">
-                <button type="button" className="link small" onClick={() => setAskOpen(false)}>
-                  ← Inbox
-                </button>
-                <span className="muted small">Ask about the whole inbox</span>
-              </div>
-              <p className="overview-hint muted small">
-                Open a message to see the AI&apos;s review and plan, or ask about the whole inbox
-                here.
-              </p>
-              <ChatView
-                chat={chat}
-                busy={busy}
-                suggestions={meta?.suggestions ?? []}
-                properties={properties}
-                maxChars={meta?.max_message_chars ?? 1000}
-                aiLabel={aiLabel}
-                onSend={(text) => {
-                  const history = historyFor(chat);
-                  setChat((c) => [...c, { id: entryId(), role: "host", text, at: Date.now() }]);
-                  void ask(text, history);
-                }}
-                onPaste={paste}
-                onApprove={approveChat}
-                onDismiss={(entry, i) => setChat((c) => setCardState(c, entry, [i], "dismissed"))}
-                onOpen={(id) => openMessage(id)}
-              />
-            </div>
+            <ComposePanel
+              properties={properties}
+              busy={busy}
+              aiLabel={aiLabel}
+              maxChars={meta?.max_message_chars ?? 1000}
+              onWrite={compose}
+              onAdd={addComposed}
+              onClose={() => setAskOpen(false)}
+            />
           )}
         </aside>
       </main>

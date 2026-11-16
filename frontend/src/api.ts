@@ -2,6 +2,8 @@ import type {
   AgentReply,
   AgentStateIn,
   AgentTurn,
+  ComposeResult,
+  ExtraMessageIn,
   LiveTriage,
   Message,
   Meta,
@@ -46,9 +48,16 @@ export const api = {
     state: AgentStateIn,
     messageId?: number,
     team: string[] = [],
+    extra: ExtraMessageIn[] = [],
   ) =>
     request<AgentReply>("/api/agent", {
       method: "POST",
-      body: JSON.stringify({ text, history, state, message_id: messageId ?? null, team }),
+      body: JSON.stringify({ text, history, state, message_id: messageId ?? null, team, extra }),
+    }),
+  /** Write a fake guest message from the host's brief (New guest message). */
+  compose: (brief: string, propertyId: number | null) =>
+    request<ComposeResult>("/api/compose", {
+      method: "POST",
+      body: JSON.stringify({ brief, property_id: propertyId }),
     }),
 };

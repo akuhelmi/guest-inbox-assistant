@@ -24,6 +24,7 @@ from .agent import (
     Turn,
     build_agent,
 )
+from .compose import ComposeInput, PropertyRef, TemplateComposer, build_composer
 from .config import Settings, load_settings
 from .db import make_engine, make_session_factory
 from .models import Message, Property
@@ -31,6 +32,8 @@ from .schemas import (
     AgentOut,
     AgentRequest,
     CardOut,
+    ComposeOut,
+    ComposeRequest,
     FactOut,
     FactRef,
     LiveTriageOut,
@@ -56,6 +59,7 @@ from .triage import (
     build_triager,
     language_label,
 )
+from .triage.offline import OfflineTriager
 
 
 def _from_result(r: TriageResult) -> TriageOut:
@@ -191,6 +195,32 @@ def agent_input(
         PropertyInfo(p.id, p.name, p.city, dict(p.facts or {}))
         for p in session.scalars(select(Property).order_by(Property.id))
     )
+    names = {p.id: p.name for p in props}
+    for x in payload.extra:
+        if x.property_id not in names or x.category not in CATEGORIES:
+            continue
+        own = payload.state.statuses.get(x.id)
+        items.append(
+            InboxItem(
+                id=x.id,
+                guest_name=x.guest_name,
+                property_id=x.property_id,
+                property_name=names[x.property_id],
+                category=x.category,
+                urgent=x.urgent,
+                needs_host=x.needs_host,
+                status=own.status if own else "new",
+                wait_minutes=x.wait_minutes,
+                body=x.body,
+                draft_reply=x.draft_reply,
+                language=x.language,
+                confidence=x.confidence,
+                task_title=x.task_title,
+                task_assignee=x.task_assignee,
+                task_due_minutes=x.task_due_minutes,
+                open_tasks=tuple(open_tasks.get(x.id, ())),
+            )
+        )
     history = tuple(Turn(t.role, t.text) for t in payload.history[-8:])
     known = {i.id for i in items}
     focus = payload.message_id if payload.message_id in known else None
@@ -244,13 +274,18 @@ def client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def create_app(settings: Settings | None = None, triager=None, agent=None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None, triager=None, agent=None, composer=None
+) -> FastAPI:
     settings = settings or load_settings()
     engine = make_engine(settings.database_url)
     session_factory = make_session_factory(engine)
     triager = triager or build_triager(settings)
     agent = agent or build_agent(settings)
+    composer = composer or build_composer(settings)
     rules = RulesAgent()
+    templates = TemplateComposer()
+    offline = OfflineTriager()
 
     app = FastAPI(title="Guest Inbox Assistant", version="0.1.0")
     app.state.engine = engine
@@ -429,6 +464,62 @@ def create_app(settings: Settings | None = None, triager=None, agent=None) -> Fa
             ai_left_today=left,
             note=note,
             plan=reply.plan,
+        )
+
+    @app.post("/api/compose", response_model=ComposeOut)
+    def compose_message(
+        payload: ComposeRequest, request: Request, session: Session = Depends(get_session)
+    ) -> ComposeOut:
+        """Write a fake guest message from the host's brief, then sort and draft it.
+
+        Counts as one AI reply. Nothing is stored: the browser keeps the message.
+        """
+        brief = payload.brief.strip()
+        if not brief:
+            raise HTTPException(status_code=422, detail="Describe the guest message first.")
+        props = list(session.scalars(select(Property).order_by(Property.id)))
+        if payload.property_id is not None and payload.property_id not in {p.id for p in props}:
+            raise HTTPException(status_code=422, detail="Unknown property.")
+        item = ComposeInput(
+            brief=brief,
+            properties=tuple(PropertyRef(p.id, p.name, p.city) for p in props),
+            property_id=payload.property_id,
+        )
+        note, left = None, None
+        writer, sorter = templates, offline
+        if composer.name != templates.name:
+            visitor = ratelimit.visitor_hash(client_ip(request), settings.rate_limit_salt)
+            allowed, left = ratelimit.check_and_count(
+                session, visitor, settings.agent_limit_per_day, daily=True
+            )
+            if allowed:
+                writer, sorter = composer, triager
+            else:
+                note = (
+                    f"You've used today's {settings.agent_limit_per_day} AI replies, so a "
+                    "simple template wrote this one."
+                )
+        made = writer.compose(item)
+        if made.by.endswith("(fallback)"):
+            note = "The AI is unavailable right now, so a simple template wrote this one."
+        prop = next(p for p in props if p.id == made.property_id)
+        result = sorter.triage(_triage_input(made.body, made.guest_name, prop))
+        return ComposeOut(
+            message=MessageOut(
+                id=0,
+                guest_name=made.guest_name,
+                property_id=prop.id,
+                property_name=prop.name,
+                property_city=prop.city,
+                received_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                body=made.body,
+                triage=_from_result(result),
+                channel=made.channel,
+            ),
+            by=made.by,
+            pasted=made.pasted,
+            ai_left_today=left,
+            note=note,
         )
 
     _mount_frontend(app)

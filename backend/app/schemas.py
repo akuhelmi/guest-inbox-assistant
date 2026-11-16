@@ -125,6 +125,39 @@ class AgentTask(BaseModel):
     done: bool = False
 
 
+class ExtraMessage(BaseModel):
+    """A message the visitor added with "New guest message" (kept in their browser)."""
+
+    id: int = Field(lt=0)  # negative, so it never clashes with a saved message
+    guest_name: str = Field(max_length=60)
+    property_id: int
+    wait_minutes: int = Field(default=0, ge=0)
+    category: str = "general_question"
+    urgent: bool = False
+    needs_host: bool = False
+    body: str = Field(max_length=1000)
+    draft_reply: str = Field(default="", max_length=2000)
+    language: str = Field(default="en", max_length=8)
+    confidence: str = "medium"
+    task_title: str = Field(default="", max_length=200)
+    task_assignee: str = ""
+    task_due_minutes: int = 0
+
+
+class ComposeRequest(BaseModel):
+    brief: str = Field(max_length=500)
+    property_id: int | None = None
+
+
+class ComposeOut(BaseModel):
+    # id is 0: the browser gives the message its own (negative) id.
+    message: MessageOut
+    by: str
+    pasted: bool = False
+    ai_left_today: int | None = None
+    note: str | None = None
+
+
 class AgentState(BaseModel):
     """The visitor's own statuses and tasks (kept in their browser, sent with each turn)."""
 
@@ -140,6 +173,8 @@ class AgentRequest(BaseModel):
     state: AgentState = Field(default_factory=AgentState)
     # The team's day as the browser sees it ("Aiman: busy, Aircon service until 3:30 pm").
     team: list[str] = Field(default_factory=list, max_length=12)
+    # Messages the visitor added themselves (not in the database).
+    extra: list[ExtraMessage] = Field(default_factory=list, max_length=20)
 
 
 class CardOut(BaseModel):
