@@ -20,6 +20,7 @@ import {
   resultText,
   saveThreads,
   setProposal,
+  syncArrival,
   threadFor,
 } from "./lib/proposals";
 import {
@@ -49,6 +50,8 @@ import type { AgentReply, AgentTurn, ComposeResult, Filter, Message, Meta, Prope
 import {
   type Team,
   anchorOf,
+  arrivalForTask,
+  arrivalSentence,
   assign,
   clock,
   daySlots,
@@ -56,6 +59,7 @@ import {
   notifyText,
   personLabel,
   teamLines,
+  updateOpening,
 } from "./lib/team";
 import { TasksView, TeamDay, WaitChip } from "./workflow-ui";
 import { MessageWorkspace } from "./workspace-ui";
@@ -174,7 +178,9 @@ export default function App() {
   function openMessage(id: number) {
     const m = messages.find((x) => x.id === id);
     if (!m) return;
-    setThreads((t) => ensureThread(t, m, demo, staff));
+    setThreads((t) =>
+      syncArrival(ensureThread(t, m, demo, staff), m, demo, arrivalForTask(demo.tasks, m)),
+    );
     setView("inbox");
     setAskOpen(false);
     setOpenId(id);
@@ -199,13 +205,19 @@ export default function App() {
         });
         const taskId = `${messageKey(m)}:${at}`;
         setDemo((d) => addTask(d, m, p.task!, at, a));
+        // The reply that follows tells the guest who is coming and when (D26).
         setThreads((t) =>
-          resolveStep(t, m, demo, p.pid, "approved", resultText(p, m.channel), {
-            role: "assistant",
-            text: `${a.note} ${notifyText(team, a)}`.trim(),
-            by: "saved",
-            escalation: a.person === "host" ? undefined : taskId,
-          }),
+          syncArrival(
+            resolveStep(t, m, demo, p.pid, "approved", resultText(p, m.channel), {
+              role: "assistant",
+              text: `${a.note} ${notifyText(team, a)}`.trim(),
+              by: "saved",
+              escalation: a.person === "host" ? undefined : taskId,
+            }),
+            m,
+            demo,
+            arrivalSentence(a, m),
+          ),
         );
         continue;
       }
@@ -222,15 +234,21 @@ export default function App() {
     const { assignment, text } = escalate(team, slots, task, task.propertyId ?? m.property_id, at);
     setDemo((d) => reassignTask(d, taskId, assignment, at));
     setThreads((t) =>
-      addTurns(t, m, demo, [
-        { role: "host", text: `Simulate: no answer from ${task.personName ?? "them"}`, action: true },
-        {
-          role: "assistant",
-          text,
-          by: "saved",
-          escalation: assignment.person === "host" ? undefined : taskId,
-        },
-      ]),
+      syncArrival(
+        addTurns(t, m, demo, [
+          { role: "host", text: `Simulate: no answer from ${task.personName ?? "them"}`, action: true },
+          {
+            role: "assistant",
+            text,
+            by: "saved",
+            escalation: assignment.person === "host" ? undefined : taskId,
+          },
+        ]),
+        m,
+        demo,
+        arrivalSentence(assignment, m),
+        { followUp: updateOpening(m), now: at },
+      ),
     );
   }
 
@@ -255,16 +273,24 @@ export default function App() {
     const history: AgentTurn[] = thread.turns.slice(-8).map((x) => ({ role: x.role, text: x.text }));
     setThreads((t) => addHostTurn(t, m, demo, text));
     setWsBusy(true);
+    const arrival = arrivalForTask(demo.tasks, m);
+    const lines = teamLines(team, slots, Date.now());
+    if (arrival) {
+      // Tell the AI who is already on the way, so a new reply says it too.
+      lines.push(`On the way for #${m.id}: ${arrival.text}`.slice(0, 200));
+    }
     try {
       const reply = await api.agent(
         text,
         history,
         agentState(messages, demo),
         m.id,
-        teamLines(team, slots, Date.now()),
+        lines,
         extraPayload(extra, demo),
       );
-      setThreads((t) => addReply(t, m, demo, reply, Date.now(), staff));
+      setThreads((t) =>
+        syncArrival(addReply(t, m, demo, reply, Date.now(), staff), m, demo, arrival),
+      );
       if (reply.ai_left_today !== null) setAiLeft(reply.ai_left_today);
     } catch (e) {
       setThreads((t) => addReply(t, m, demo, errorReply((e as Error).message)));

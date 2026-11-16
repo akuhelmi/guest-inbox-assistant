@@ -2,7 +2,7 @@
  * The demo team: who can do a job, who is free, who is nearest. Pure functions, so the
  * assignment logic is tested and the same on every screen. All people and jobs are invented.
  */
-import type { TaskSuggestion } from "../types";
+import type { Message, TaskSuggestion } from "../types";
 import type { DemoState, Task } from "./workflow";
 
 /** Minutes on site for a new job, after the drive. */
@@ -236,6 +236,85 @@ export function escalate(
       ? `No answer from ${prev} after ${CONFIRM_MINUTES} min, and nobody else can take it. The task is now yours.`
       : `No answer from ${prev} after ${CONFIRM_MINUTES} min. Passed to ${assignment.name}. ${assignment.note} ${notifyText(team, assignment)}`;
   return { assignment, text };
+}
+
+/** The sentence a guest reply gets about who is coming and when, and the time it names. */
+export interface Arrival {
+  text: string;
+  time: string;
+}
+
+type Who = Pick<Assignment, "person" | "name" | "arrivesAt" | "late">;
+
+const ARRIVAL: Record<string, { urgent: string; late: string; normal: string; update: string }> = {
+  en: {
+    urgent: "{name} from our team is on the way and should arrive around {time}.",
+    late: "{name} from our team is on the way; the earliest they can arrive is around {time}. Sorry it can't be sooner: we'll keep you updated.",
+    normal: "{name} from our team can be there around {time}. Just tell us if another time suits you better.",
+    update: "Hi {guest}, a quick update:",
+  },
+  ms: {
+    urgent: "{name} dari pasukan kami sedang dalam perjalanan dan dijangka tiba sekitar {time}.",
+    late: "{name} dari pasukan kami sedang dalam perjalanan, paling awal tiba sekitar {time}. Maaf tidak dapat lebih cepat: kami akan maklumkan perkembangan.",
+    normal: "{name} dari pasukan kami boleh datang sekitar {time}. Beritahu kami jika masa lain lebih sesuai.",
+    update: "Hai {guest}, makluman terkini:",
+  },
+  zh: {
+    urgent: "我们团队的{name}已在路上，预计{time}左右到达。",
+    late: "我们团队的{name}已在路上，最早约{time}到达。抱歉无法更快，我们会随时告知进展。",
+    normal: "我们团队的{name}可以在{time}左右过来。如果其他时间更方便，请告诉我们。",
+    update: "{guest}您好，最新情况：",
+  },
+  fr: {
+    urgent: "{name}, de notre équipe, est en route et devrait arriver vers {time}.",
+    late: "{name}, de notre équipe, est en route ; au plus tôt vers {time}. Désolé de ne pas pouvoir faire plus vite : nous vous tiendrons informé.",
+    normal: "{name}, de notre équipe, peut passer vers {time}. Dites-nous si un autre horaire vous convient mieux.",
+    update: "Bonjour {guest}, petite mise à jour :",
+  },
+};
+
+function fill(template: string, values: Record<string, string>): string {
+  return template.replace(/\{(\w+)\}/g, (_, k: string) => values[k] ?? "");
+}
+
+/**
+ * What the guest is told about the visit: who is coming and about when, in the guest's
+ * language. Null when the host handles it (nobody from the team is coming).
+ */
+export function arrivalSentence(
+  who: Who,
+  m: Pick<Message, "triage">,
+): Arrival | null {
+  if (!who.person || who.person === HOST) return null;
+  const t = ARRIVAL[m.triage.language] ?? ARRIVAL.en;
+  const time = clock(who.arrivesAt);
+  const template = who.late ? t.late : m.triage.urgent ? t.urgent : t.normal;
+  return { text: fill(template, { name: who.name, time }), time };
+}
+
+/** The opening of a follow-up message when the person or the time changed after the reply. */
+export function updateOpening(m: Pick<Message, "triage" | "guest_name">): string {
+  const t = ARRIVAL[m.triage.language] ?? ARRIVAL.en;
+  return fill(t.update, { guest: m.guest_name.split(" ")[0] });
+}
+
+/** The arrival for a message's open team task, if it has one. */
+export function arrivalForTask(
+  tasks: Task[],
+  m: Pick<Message, "triage" | "id" | "guest_name">,
+): Arrival | null {
+  const key = `${m.id}:${m.guest_name}`;
+  const task = [...tasks].reverse().find((t) => t.messageKey === key && !t.done && t.person && t.arrivesAt);
+  if (!task) return null;
+  return arrivalSentence(
+    {
+      person: task.person as string,
+      name: task.personName ?? task.person ?? "",
+      arrivesAt: task.arrivesAt as number,
+      late: (task.arrivesAt as number) > task.dueAt,
+    },
+    m,
+  );
 }
 
 /** The demo's day starts at the visitor's first visit (Reset demo starts a new one). */

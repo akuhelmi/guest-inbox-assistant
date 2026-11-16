@@ -17,6 +17,7 @@ import {
   sendLabel,
   setProposal,
   stepTitle,
+  syncArrival,
   reviewText,
   threadFor,
 } from "./proposals";
@@ -48,8 +49,8 @@ function reply(extra: Partial<AgentReply> = {}): AgentReply {
 describe("saved proposals", () => {
   it("offers a reply, a task and the next status for a waiting message", () => {
     const cards = savedProposals(leak, EMPTY_STATE);
-    expect(cards.map((c) => c.kind)).toEqual(["draft", "task", "status"]);
-    expect(cards[0].draft).toBe("Hi guest 1");
+    expect(cards.map((c) => c.kind)).toEqual(["task", "draft", "status"]);
+    expect(cards[1].draft).toBe("Hi guest 1");
     expect(cards[2].status).toBe("replied");
   });
 
@@ -80,7 +81,7 @@ describe("threads", () => {
 
   it("swaps a pending step for the AI's new card of the same kind and keeps plan order", () => {
     let threads = ensureThread({}, leak, EMPTY_STATE);
-    const [draft, task] = threadFor(threads, leak, EMPTY_STATE).proposals;
+    const [task, draft] = threadFor(threads, leak, EMPTY_STATE).proposals;
     threads = setProposal(threads, leak, EMPTY_STATE, draft.pid, { state: "approved" });
     threads = addHostTurn(threads, leak, EMPTY_STATE, "make the plumber come sooner");
     const newTask = { ...task, task: { ...TASK, due_minutes: 15 } };
@@ -104,7 +105,7 @@ describe("threads", () => {
 
   it("lets a whole AI plan drop a step the host doesn't want", () => {
     let threads = ensureThread({}, leak, EMPTY_STATE);
-    const [draft, , status] = threadFor(threads, leak, EMPTY_STATE).proposals;
+    const [, draft, status] = threadFor(threads, leak, EMPTY_STATE).proposals;
     const plan = reply({ plan: true, cards: [{ ...draft, draft: "Shorter" }, status] });
     threads = addReply(threads, leak, EMPTY_STATE, plan, NOW);
     const t = threadFor(threads, leak, EMPTY_STATE);
@@ -119,8 +120,8 @@ describe("threads", () => {
     const card = { ...draft, kind: "task" as const, task: TASK };
     threads = addReply(threads, quiet, EMPTY_STATE, reply({ cards: [card] }), NOW);
     expect(threadFor(threads, quiet, EMPTY_STATE).proposals.map((p) => p.kind)).toEqual([
-      "draft",
       "task",
+      "draft",
       "status",
     ]);
   });
@@ -128,16 +129,16 @@ describe("threads", () => {
   it("names the person the team logic picked in the plan", () => {
     const staff = () => ({ person: "ravi", label: "Ravi (maintenance)" });
     const t = threadFor({}, leak, EMPTY_STATE, staff);
-    expect(t.proposals[1].task?.person).toBe("ravi");
-    expect(t.turns[0].plan?.[1].title).toBe(
+    expect(t.proposals[0].task?.person).toBe("ravi");
+    expect(t.turns[0].plan?.[0].title).toBe(
       "Create a task for Ravi (maintenance) and notify them: Plumber",
     );
   });
 
   it("posts a follow-up after a step, before the next step", () => {
     let threads = agreePlan(ensureThread({}, leak, EMPTY_STATE), leak, EMPTY_STATE);
-    const [draft] = threadFor(threads, leak, EMPTY_STATE).proposals;
-    threads = resolveStep(threads, leak, EMPTY_STATE, draft.pid, "approved", "Sent", {
+    const [first] = threadFor(threads, leak, EMPTY_STATE).proposals;
+    threads = resolveStep(threads, leak, EMPTY_STATE, first.pid, "approved", "Sent", {
       role: "assistant",
       text: "Ravi notified.",
       escalation: "task-1",
@@ -152,8 +153,8 @@ describe("threads", () => {
     expect(t.turns[0].role).toBe("assistant");
     expect(t.turns[0].text).toBe(reviewText(leak));
     expect(t.turns[0].plan?.map((l) => l.title)).toEqual([
-      `Reply to ${leak.guest_name} on Airbnb`,
       "Create a task for the maintenance team and notify them: Plumber",
+      `Reply to ${leak.guest_name} on Airbnb`,
       "Move the message to Replied",
     ]);
   });
@@ -188,12 +189,13 @@ describe("threads", () => {
 
   it("posts the new version of a step the host asked to change", () => {
     let threads = agreePlan(ensureThread({}, leak, EMPTY_STATE), leak, EMPTY_STATE);
-    const [draft] = threadFor(threads, leak, EMPTY_STATE).proposals;
-    threads = addReply(threads, leak, EMPTY_STATE, reply({ cards: [{ ...draft, draft: "Warmer" }] }), NOW);
+    const [task] = threadFor(threads, leak, EMPTY_STATE).proposals;
+    const sooner = { ...task, task: { ...TASK, title: "Plumber, sooner" } };
+    threads = addReply(threads, leak, EMPTY_STATE, reply({ cards: [sooner] }), NOW);
     const t = threadFor(threads, leak, EMPTY_STATE);
     const last = t.turns.at(-1);
     expect(last?.text).toBe("Step 1 of 3");
-    expect(t.proposals.find((p) => p.pid === last?.step)?.draft).toBe("Warmer");
+    expect(t.proposals.find((p) => p.pid === last?.step)?.task?.title).toBe("Plumber, sooner");
   });
 
   it("saves and loads, tolerating bad data", () => {
@@ -216,7 +218,7 @@ describe("threads", () => {
 
 describe("labels and results", () => {
   it("writes the review and one line per step", () => {
-    const [draft, task, status] = threadFor(ensureThread({}, leak, EMPTY_STATE), leak, EMPTY_STATE)
+    const [task, draft, status] = threadFor(ensureThread({}, leak, EMPTY_STATE), leak, EMPTY_STATE)
       .proposals;
     expect(reviewText(leak)).toMatch(/^Urgent\. /);
     expect(stepTitle(draft, leak)).toBe(`Reply to ${leak.guest_name} on Airbnb`);
@@ -233,7 +235,7 @@ describe("labels and results", () => {
   });
 
   it("says what approving did, including who got the task", () => {
-    const [draft, task, status] = threadFor(ensureThread({}, leak, EMPTY_STATE), leak, EMPTY_STATE)
+    const [task, draft, status] = threadFor(ensureThread({}, leak, EMPTY_STATE), leak, EMPTY_STATE)
       .proposals;
     expect(resultText(draft, "booking")).toMatch(/^Sent on Booking.com \(demo/);
     expect(resultText(task, "airbnb")).toBe("Task created for Maintenance");
@@ -244,5 +246,61 @@ describe("labels and results", () => {
       "Task added to your own list",
     );
     expect(resultText(status, "airbnb")).toBe("Marked Replied");
+  });
+});
+
+describe("arrival time in the reply (D26)", () => {
+  const arrival = { text: "Aiman from our team is on the way and should arrive around 3:55 PM.", time: "3:55 PM" };
+  const later = { text: "Rosli from our team is on the way and should arrive around 4:20 PM.", time: "4:20 PM" };
+
+  it("puts a host task after the reply, and a team task before it", () => {
+    const own = msg(4, 5, { suggested_task: { ...TASK, assignee: "host" } });
+    expect(savedProposals(own, EMPTY_STATE).map((c) => c.kind)).toEqual(["draft", "task", "status"]);
+    expect(savedProposals(leak, EMPTY_STATE).map((c) => c.kind)).toEqual(["task", "draft", "status"]);
+  });
+
+  it("adds who is coming and when to the reply, then swaps it when that changes", () => {
+    let threads = syncArrival(ensureThread({}, leak, EMPTY_STATE), leak, EMPTY_STATE, arrival);
+    const draft = () => threadFor(threads, leak, EMPTY_STATE).proposals.find((p) => p.kind === "draft");
+    expect(draft()?.draft).toBe(`Hi guest 1 ${arrival.text}`);
+    // Same sentence again: nothing changes.
+    expect(syncArrival(threads, leak, EMPTY_STATE, arrival)).toBe(threads);
+    threads = syncArrival(threads, leak, EMPTY_STATE, later, { followUp: "Hi guest, a quick update:" });
+    expect(draft()?.draft).toBe(`Hi guest 1 ${later.text}`);
+    expect(threadFor(threads, leak, EMPTY_STATE).proposals).toHaveLength(3);
+  });
+
+  it("leaves a draft that already gives the time, or where the host removed the sentence", () => {
+    let threads = ensureThread({}, leak, EMPTY_STATE);
+    const pid = threadFor(threads, leak, EMPTY_STATE).proposals[1].pid;
+    threads = setProposal(threads, leak, EMPTY_STATE, pid, { draft: "Aiman arrives at 3:55 PM." });
+    expect(syncArrival(threads, leak, EMPTY_STATE, arrival)).toBe(threads);
+
+    threads = syncArrival(ensureThread({}, leak, EMPTY_STATE), leak, EMPTY_STATE, arrival);
+    const fresh = threadFor(threads, leak, EMPTY_STATE).proposals[1].pid;
+    threads = setProposal(threads, leak, EMPTY_STATE, fresh, { draft: "Hi, we're on it." });
+    const synced = syncArrival(threads, leak, EMPTY_STATE, later);
+    expect(threadFor(synced, leak, EMPTY_STATE).proposals[1].draft).toBe("Hi, we're on it.");
+  });
+
+  it("offers the guest an update when the time changes after the reply went out", () => {
+    let threads = agreePlan(ensureThread({}, leak, EMPTY_STATE), leak, EMPTY_STATE);
+    const [task, draft, status] = threadFor(threads, leak, EMPTY_STATE).proposals;
+    threads = resolveStep(threads, leak, EMPTY_STATE, task.pid, "approved", "Task created");
+    threads = syncArrival(threads, leak, EMPTY_STATE, arrival);
+    threads = resolveStep(threads, leak, EMPTY_STATE, draft.pid, "approved", "Sent");
+    threads = resolveStep(threads, leak, EMPTY_STATE, status.pid, "approved", "Marked Replied");
+    expect(threadFor(threads, leak, EMPTY_STATE).turns.at(-1)?.end).toBe(true);
+
+    // Without followUp (e.g. just opening the message) nothing is added.
+    expect(syncArrival(threads, leak, EMPTY_STATE, later)).toBe(threads);
+    threads = syncArrival(threads, leak, EMPTY_STATE, later, { followUp: "Hi guest, a quick update:", now: NOW });
+    const t = threadFor(threads, leak, EMPTY_STATE);
+    const step = currentStep(t);
+    expect(step?.kind).toBe("draft");
+    expect(step?.draft).toBe(`Hi guest, a quick update: ${later.text}`);
+    expect(t.turns.at(-1)?.text).toBe("Step 4 of 4");
+    // A null arrival (the host took it over) changes nothing.
+    expect(syncArrival(threads, leak, EMPTY_STATE, null)).toBe(threads);
   });
 });

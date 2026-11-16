@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   HOST,
+  arrivalForTask,
+  arrivalSentence,
+  clock,
+  updateOpening,
   type Team,
   assign,
   busyWith,
@@ -137,5 +141,38 @@ describe("for the AI", () => {
     expect(lines).toHaveLength(4);
     expect(lines[0]).toMatch(/^aiman: Aiman, Maintenance, based in Cheras, busy with Aircon service/);
     expect(lines[1]).toContain("free now; next job Water heater check");
+  });
+});
+
+describe("arrival sentence for the guest (D26)", () => {
+  const who = { person: "aiman", name: "Aiman", arrivesAt: NOW + 25 * MIN, late: false };
+  const time = clock(NOW + 25 * MIN);
+
+  it("says who is coming and when: on the way when urgent, a proposed time otherwise", () => {
+    const urgent = arrivalSentence(who, msg(1, 5, { urgent: true }));
+    expect(urgent).toEqual({ text: `Aiman from our team is on the way and should arrive around ${time}.`, time });
+    expect(arrivalSentence(who, msg(1, 5))?.text).toMatch(/^Aiman from our team can be there around /);
+    expect(arrivalSentence({ ...who, late: true }, msg(1, 5, { urgent: true }))?.text).toMatch(
+      /earliest they can arrive is around .*Sorry it can't be sooner/,
+    );
+  });
+
+  it("writes it in the guest's language, and says nothing when the host handles it", () => {
+    expect(arrivalSentence(who, msg(1, 5, { urgent: true, language: "ms" }))?.text).toMatch(/^Aiman dari pasukan kami/);
+    expect(arrivalSentence(who, msg(1, 5, { language: "zh" }))?.text).toMatch(/^我们团队的Aiman/);
+    expect(arrivalSentence(who, msg(1, 5, { language: "fr" }))?.text).toMatch(/^Aiman, de notre équipe/);
+    expect(arrivalSentence(who, msg(1, 5, { language: "de" }))?.text).toMatch(/^Aiman from our team/);
+    expect(arrivalSentence({ ...who, person: HOST }, msg(1, 5))).toBeNull();
+    expect(updateOpening(msg(1, 5, { language: "ms" }))).toBe("Hai Guest, makluman terkini:");
+  });
+
+  it("finds the open team task for a message, late when it arrives after the target", () => {
+    const m = msg(1, 5, { urgent: true });
+    const a = assign(TEAM, SLOTS, FIX, 1, NOW);
+    const demo = addTask(EMPTY_STATE, m, { ...FIX, title: "Fix", assignee_label: "Maintenance" }, NOW, a);
+    expect(arrivalForTask(demo.tasks, m)?.text).toContain(a.name);
+    expect(arrivalForTask(demo.tasks, msg(2, 5))).toBeNull();
+    const late = { ...demo.tasks[0], dueAt: NOW };
+    expect(arrivalForTask([late], m)?.text).toMatch(/earliest/);
   });
 });

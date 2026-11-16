@@ -47,6 +47,8 @@ export interface Proposal extends AgentCard {
   result?: string;
   /** "saved" = from the stored triage; otherwise the provider that proposed it. */
   source: string;
+  /** A reply: the arrival sentence added to it (so a new time replaces it, not stacks). */
+  arrival?: string;
 }
 
 export interface PlanLine {
@@ -81,7 +83,21 @@ export interface Thread {
   agreed?: boolean;
 }
 
-const KIND_ORDER: Record<string, number> = { draft: 0, task: 1, status: 2 };
+/**
+ * Plan order. A job for the team comes before the reply, so the reply can tell the guest who
+ * is coming and when (D26). A task for the host comes after the reply.
+ */
+function stepOrder(p: Pick<AgentCard, "kind" | "task">): number {
+  if (p.kind === "task") {
+    const own = p.task?.assignee === "host" || p.task?.person === "host";
+    return own ? 1.5 : 0;
+  }
+  return p.kind === "draft" ? 1 : p.kind === "status" ? 2 : 9;
+}
+
+export function inPlanOrder<T extends Pick<AgentCard, "kind" | "task">>(steps: T[]): T[] {
+  return [...steps].sort((a, b) => stepOrder(a) - stepOrder(b));
+}
 
 export type Threads = Record<string, Thread>;
 
@@ -128,7 +144,7 @@ export function savedProposals(m: Message, demo: DemoState): AgentCard[] {
     const target = status === "new" && cards.some((c) => c.kind === "task") ? "replied" : "done";
     cards.push({ ...baseCard(m), kind: "status", status: target });
   }
-  return cards;
+  return inPlanOrder(cards);
 }
 
 export function toProposals(cards: AgentCard[], source: string, now: number = Date.now()) {
@@ -221,7 +237,7 @@ export function addHostTurn(threads: Threads, m: Message, demo: DemoState, text:
  * Add the AI's answer to the thread. When the answer is a whole plan (`reply.plan`), its cards
  * replace every step not done yet (so the host can drop a step). Otherwise a new card replaces
  * the pending step of the same kind and other new cards become new steps. Finished steps never
- * change. Pending steps stay in plan order: reply, task, status.
+ * change. Pending steps stay in plan order: team task, reply, status (see stepOrder).
  */
 export function addReply(
   threads: Threads,
@@ -240,10 +256,10 @@ export function addReply(
   });
   const fresh = toProposals(cards, reply.by, now).map((p) => staffed(p, m, staff));
   const finished = t.proposals.filter((p) => p.state !== "pending");
-  const pending = [
+  const pending = inPlanOrder([
     ...t.proposals.filter((p) => p.state === "pending" && !reply.plan && !seen.has(p.kind)),
     ...fresh,
-  ].sort((a, b) => (KIND_ORDER[a.kind] ?? 9) - (KIND_ORDER[b.kind] ?? 9));
+  ]);
   return put(threads, m, {
     ...t,
     proposals: [...finished, ...pending],
@@ -286,6 +302,67 @@ export function resolveStep(
     ...t,
     proposals: t.proposals.map((p) => (p.pid === id ? { ...p, state, result } : p)),
     turns: [...t.turns, { role: "host", text, action: true }, ...(followUp ? [followUp] : [])],
+  });
+}
+
+/** The arrival sentence a reply carries; `time` is how a draft that already says it is spotted. */
+export interface ArrivalLine {
+  text: string;
+  time: string;
+}
+
+function joinSentence(draft: string, sentence: string): string {
+  const body = draft.trimEnd();
+  return body ? `${body} ${sentence}` : sentence;
+}
+
+/**
+ * Keep the reply in step with who is coming and when (D26).
+ * - A reply not sent yet gets the sentence, or its old sentence is swapped for the new one.
+ *   A draft that already names the time (e.g. the AI wrote it) is left alone, and so is one
+ *   where the host deleted the sentence.
+ * - With `followUp`, a reply already sent with a different time gets a new step: a short
+ *   update for the guest.
+ */
+export function syncArrival(
+  threads: Threads,
+  m: Message,
+  demo: DemoState,
+  arrival: ArrivalLine | null,
+  options: { followUp?: string; now?: number } = {},
+): Threads {
+  if (!arrival) return threads;
+  const t = threadFor(threads, m, demo);
+  const pending = t.proposals.find((p) => p.kind === "draft" && p.state === "pending");
+  if (pending) {
+    if (pending.arrival === arrival.text) return threads;
+    let draft = pending.draft;
+    if (pending.arrival) {
+      if (!draft.includes(pending.arrival)) return threads;
+      draft = draft.replace(pending.arrival, arrival.text);
+    } else {
+      if (draft.includes(arrival.time)) return threads;
+      draft = joinSentence(draft, arrival.text);
+    }
+    return put(threads, m, {
+      ...t,
+      proposals: t.proposals.map((p) => (p.pid === pending.pid ? { ...p, draft, arrival: arrival.text } : p)),
+    });
+  }
+  const sent = [...t.proposals].reverse().find((p) => p.kind === "draft" && p.state === "approved");
+  if (!options.followUp || !sent || sent.arrival === arrival.text) return threads;
+  const [update] = toProposals(
+    [{ ...baseCard(m), kind: "draft", draft: `${options.followUp} ${arrival.text}` }],
+    "saved",
+    options.now,
+  );
+  return put(threads, m, {
+    ...t,
+    proposals: [...t.proposals, { ...update, arrival: arrival.text }],
+    turns: [
+      ...t.turns,
+      { role: "assistant", text: "The arrival time changed, so the guest should hear about it.", by: "saved" },
+    ],
   });
 }
 

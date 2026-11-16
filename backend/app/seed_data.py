@@ -110,7 +110,7 @@ MESSAGES: list[dict] = [
         "reason": "Active leak flooding the bathroom: risk of damage.",
         "draft": "Hi Priya, thank you for telling us straight away. Please turn the main water "
         "valve off (cupboard under the kitchen sink, red handle) and keep away from the sockets "
-        "near the wet floor. Our plumber is on the way and will call you within 20 minutes.",
+        "near the wet floor.",
     },
     {
         "property": "garden",
@@ -162,9 +162,9 @@ MESSAGES: list[dict] = [
         "category": "complaint",
         "urgent": False,
         "reason": "Unhappy with cleanliness; says the listing was not accurate.",
-        "draft": "Hi Ahmad, I'm really sorry, that is not the standard we promise. Our "
-        "housekeeper can come at a time that suits you today to change the linen and "
-        "deep-clean the bathroom. I'll also look into what went wrong with this turnover.",
+        "draft": "Hi Ahmad, I'm really sorry, that is not the standard we promise. I'll look "
+        "into what went wrong with this turnover, and our housekeeper will change the linen "
+        "and deep-clean the bathroom today.",
     },
     {
         "property": "bangsar",
@@ -183,8 +183,8 @@ MESSAGES: list[dict] = [
         "urgent": False,
         "reason": "Bedroom aircon not working (error light).",
         "draft": "Hi Sophie, sorry about the warm night. Could you try switching it off at the "
-        "wall for 5 minutes and back on? If it still blinks red, our technician can come "
-        "between 2 and 4pm today: just let me know if that works.",
+        "wall for 5 minutes and back on? If it still blinks red, our technician will take a "
+        "look today.",
     },
     {
         "property": "garden",
@@ -245,7 +245,7 @@ MESSAGES: list[dict] = [
         "reason": "Gas smell: a safety risk.",
         "draft": "Hi Oliver, please turn off the stove and the gas valve behind it now, open "
         "the windows, and don't use any switches or flames in the kitchen. I'm calling you "
-        "right away, and our technician is coming to check it.",
+        "right away.",
     },
     {
         "property": "garden",
@@ -302,8 +302,8 @@ MESSAGES: list[dict] = [
         "urgent": False,
         "reason": "Wifi not working; guest works remotely.",
         "draft": "Hi Emma, sorry about that. Could you unplug the router in the TV cabinet for "
-        "30 seconds and plug it back in? If it's still down after 5 minutes, I'll send a "
-        "technician and drop off a mobile hotspot in the meantime.",
+        "30 seconds and plug it back in? If it's still down after 5 minutes, our technician "
+        "will check it and bring a mobile hotspot for the meantime.",
     },
     {
         "property": "bangsar",
@@ -360,7 +360,7 @@ MESSAGES: list[dict] = [
         "urgent": False,
         "reason": "Blocked toilet.",
         "draft": "Hi Nur Aina, sorry about this. There's a plunger in the cabinet under the "
-        "sink; if that doesn't fix it, our handyman can come within 2 hours. Just let me know.",
+        "sink; if that doesn't fix it, our handyman will sort it out.",
     },
     {
         "property": "bangsar",
@@ -409,8 +409,7 @@ MESSAGES: list[dict] = [
         "urgent": True,
         "reason": "No electricity in the whole chalet.",
         "draft": "Hi Ben, sorry about this. The fuse box is behind the front door: please check "
-        "whether the main switch has tripped and push it back up. I'm calling you now, and if "
-        "that doesn't fix it our caretaker will be there within 20 minutes.",
+        "whether the main switch has tripped and push it back up. I'm calling you now.",
     },
     {
         "property": "skyline",
@@ -445,9 +444,8 @@ MESSAGES: list[dict] = [
         "category": "maintenance",
         "urgent": True,
         "reason": "No water at all since the morning.",
-        "draft": "Hai Hafiz, maaf atas kesulitan ini. Kami sedang uruskan sekarang: pasukan "
-        "penyelenggaraan kami akan datang secepat mungkin untuk memeriksa bekalan air. "
-        "Saya akan hubungi anda sebentar lagi.",
+        "draft": "Hai Hafiz, maaf atas kesulitan ini. Kami sedang uruskan sekarang dan saya "
+        "akan hubungi anda sebentar lagi.",
         "facts_used": ["caretaker"],
         "confidence": "high",
     },

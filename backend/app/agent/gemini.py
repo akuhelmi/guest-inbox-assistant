@@ -64,9 +64,11 @@ Conversation so far:
 Host: {text}"""
 
 FOCUS = """The host has message #{id} ({guest}) open and works through a plan of steps for it
-(reply, task, status). Answer about it unless the host clearly asks about something else.
-Whenever you propose cards for it, return the WHOLE plan still to do, in order: a reply draft
-(if it still needs one), a task if the team must act, and the next status. Your cards replace
+(task, reply, status). Answer about it unless the host clearly asks about something else.
+Whenever you propose cards for it, return the WHOLE plan still to do, in order: a task if the
+team must act, a reply draft (if it still needs one), and the next status. If the team's day
+says someone is on the way for this message, the reply names them and the time; otherwise
+the reply doesn't promise a time (the app adds who is coming and when). Your cards replace
 the steps not done yet, so keep the steps the host didn't ask to change, and leave out a step
 the host wants dropped.
 """

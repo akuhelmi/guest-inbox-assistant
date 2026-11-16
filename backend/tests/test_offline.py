@@ -163,3 +163,16 @@ def test_urgent_tasks_are_due_sooner():
     calm = triager.triage(TriageInput("The aircon stopped working.", "Ana"))
     urgent = triager.triage(TriageInput("Gas smell and the stove is broken!", "Ana"))
     assert urgent.task_due_minutes < calm.task_due_minutes
+
+
+TEAM_TASKS = [
+    m for m in MESSAGES if (m.get("task") or {}).get("assignee") in ("maintenance", "cleaner")
+]
+
+
+@pytest.mark.parametrize("m", TEAM_TASKS, ids=lambda m: m["guest"])
+def test_saved_team_drafts_leave_the_arrival_time_to_the_app(m):
+    # D26: the app adds who is coming and when, from the team's real day.
+    draft = m["draft"].lower()
+    for promise in ("within", "on the way", "between", "secepat mungkin", "will be there"):
+        assert promise not in draft
