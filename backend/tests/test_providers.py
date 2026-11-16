@@ -53,7 +53,7 @@ def test_parse_response_rejects_bad_output(bad):
 def test_gemini_triager_sends_key_in_header_and_returns_result():
     client, seen = mock_client(200, gemini_payload(GOOD))
     result = GeminiTriager("test-key", "gemini-x", client=client).triage(
-        TriageInput("No hot water", "Ana Costa", "Seaview Loft")
+        TriageInput("No hot water", "Ana Costa", "Bangsar Loft")
     )
     assert result.category == "maintenance" and result.urgent
     assert result.triaged_by == "gemini"
@@ -128,7 +128,7 @@ def test_default_database_url(monkeypatch):
 def test_prompt_sends_the_property_facts_and_language_rule():
     client, seen = mock_client(200, gemini_payload(GOOD))
     facts = {"wifi": "Network X, password abc123"}
-    GeminiTriager("k", "m", client=client).triage(TriageInput("wifi?", "Ana", "Seaview", facts))
+    GeminiTriager("k", "m", client=client).triage(TriageInput("wifi?", "Ana", "Bangsar", facts))
     text = json.loads(seen[0].content)["contents"][0]["parts"][0]["text"]
     assert "- wifi: Network X, password abc123" in text
     assert "SAME language" in text
@@ -139,7 +139,7 @@ def test_gemini_result_keeps_language_confidence_and_only_known_facts():
     data = {**GOOD, "language": "FR", "confidence": "high", "facts_used": ["wifi", "pool", "wifi"]}
     client, _ = mock_client(200, gemini_payload(data))
     result = GeminiTriager("k", "m", client=client).triage(
-        TriageInput("Le wifi?", "Ana", "Seaview", {"wifi": "abc"})
+        TriageInput("Le wifi?", "Ana", "Bangsar", {"wifi": "abc"})
     )
     assert result.language == "fr"
     assert result.confidence == "high"

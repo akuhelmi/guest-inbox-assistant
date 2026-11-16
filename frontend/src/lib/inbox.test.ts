@@ -15,8 +15,8 @@ function msg(id: number, category: Category, urgent: boolean, receivedAt: string
     id,
     guest_name: "Guest",
     property_id: 1,
-    property_name: "Seaview Loft",
-    property_city: "Penang",
+    property_name: "Bangsar Loft",
+    property_city: "Kuala Lumpur",
     received_at: receivedAt,
     body: "text",
     status: "new",
@@ -102,8 +102,8 @@ describe("preview", () => {
 describe("v2 helpers", () => {
   const property: Property = {
     id: 1,
-    name: "Seaview Loft",
-    city: "Penang",
+    name: "Bangsar Loft",
+    city: "Kuala Lumpur",
     facts: [
       { key: "check_in", label: "Check-in", value: "From 3pm" },
       { key: "wifi", label: "Wi-Fi", value: "Network X" },

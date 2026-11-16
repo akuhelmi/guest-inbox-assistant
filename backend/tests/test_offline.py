@@ -19,7 +19,7 @@ OTHER_LANGUAGES = [m for m in MESSAGES if m.get("language", "en") != "en"]
 
 @pytest.mark.parametrize("m", ENGLISH, ids=lambda m: m["guest"])
 def test_offline_rules_agree_with_every_english_seed_example(m):
-    result = triager.triage(TriageInput(m["body"], m["guest"], "Seaview Loft"))
+    result = triager.triage(TriageInput(m["body"], m["guest"], "Bangsar Loft"))
     assert result.category == m["category"]
     assert result.urgent == m["urgent"]
 
@@ -85,7 +85,7 @@ def test_seed_examples_only_use_facts_on_their_property_sheet():
 
 @pytest.mark.parametrize("m", OTHER_LANGUAGES, ids=lambda m: m["guest"])
 def test_offline_never_pretends_to_translate(m):
-    result = triager.triage(TriageInput(m["body"], m["guest"], "Seaview Loft"))
+    result = triager.triage(TriageInput(m["body"], m["guest"], "Bangsar Loft"))
     assert result.language == m["language"]
     assert result.confidence == "low"
     assert "Live AI replies in the guest's language" in result.reason
@@ -93,13 +93,13 @@ def test_offline_never_pretends_to_translate(m):
 
 
 def test_wifi_question_is_answered_from_the_fact_sheet():
-    facts = FACTS["seaview"]
+    facts = FACTS["bangsar"]
     result = triager.triage(
-        TriageInput("Hi, what's the wifi password?", "Ana Costa", "Seaview Loft", facts)
+        TriageInput("Hi, what's the wifi password?", "Ana Costa", "Bangsar Loft", facts)
     )
     assert result.facts_used == ("wifi",)
     assert result.confidence == "high"
-    assert "seaview2026" in result.draft_reply
+    assert "bangsar2026" in result.draft_reply
 
 
 def test_unknown_question_says_it_will_check_instead_of_inventing():

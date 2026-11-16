@@ -125,6 +125,27 @@ describe("threads", () => {
     ]);
   });
 
+  it("names the person the team logic picked in the plan", () => {
+    const staff = () => ({ person: "ravi", label: "Ravi (maintenance)" });
+    const t = threadFor({}, leak, EMPTY_STATE, staff);
+    expect(t.proposals[1].task?.person).toBe("ravi");
+    expect(t.turns[0].plan?.[1].title).toBe(
+      "Create a task for Ravi (maintenance) and notify them: Plumber",
+    );
+  });
+
+  it("posts a follow-up after a step, before the next step", () => {
+    let threads = agreePlan(ensureThread({}, leak, EMPTY_STATE), leak, EMPTY_STATE);
+    const [draft] = threadFor(threads, leak, EMPTY_STATE).proposals;
+    threads = resolveStep(threads, leak, EMPTY_STATE, draft.pid, "approved", "Sent", {
+      role: "assistant",
+      text: "Ravi notified.",
+      escalation: "task-1",
+    });
+    const texts = threadFor(threads, leak, EMPTY_STATE).turns.slice(-3).map((x) => x.text);
+    expect(texts).toEqual(["✓ Sent", "Ravi notified.", "Step 2 of 3"]);
+  });
+
   it("opens with the review and the plan as the assistant's first message", () => {
     const t = threadFor({}, leak, EMPTY_STATE);
     expect(t.turns).toHaveLength(1);
@@ -132,7 +153,7 @@ describe("threads", () => {
     expect(t.turns[0].text).toBe(reviewText(leak));
     expect(t.turns[0].plan?.map((l) => l.title)).toEqual([
       `Reply to ${leak.guest_name} on Airbnb`,
-      "Create a task for Aiman (maintenance) and notify them: Plumber",
+      "Create a task for the maintenance team and notify them: Plumber",
       "Move the message to Replied",
     ]);
   });
@@ -200,7 +221,7 @@ describe("labels and results", () => {
     expect(reviewText(leak)).toMatch(/^Urgent\. /);
     expect(stepTitle(draft, leak)).toBe(`Reply to ${leak.guest_name} on Airbnb`);
     expect(stepTitle(task, leak)).toBe(
-      "Create a task for Aiman (maintenance) and notify them: Plumber",
+      "Create a task for the maintenance team and notify them: Plumber",
     );
     expect(stepTitle(status, leak)).toBe("Move the message to Replied");
   });
@@ -211,11 +232,14 @@ describe("labels and results", () => {
     expect(sendLabel("direct")).toBe("Send on WhatsApp");
   });
 
-  it("says what approving did, including who was nudged", () => {
+  it("says what approving did, including who got the task", () => {
     const [draft, task, status] = threadFor(ensureThread({}, leak, EMPTY_STATE), leak, EMPTY_STATE)
       .proposals;
     expect(resultText(draft, "booking")).toMatch(/^Sent on Booking.com \(demo/);
-    expect(resultText(task, "airbnb")).toContain("Aiman (maintenance) nudged");
+    expect(resultText(task, "airbnb")).toBe("Task created for Maintenance");
+    expect(
+      resultText({ ...task, task: { ...TASK, person: "ravi", person_label: "Ravi (maintenance)" } }, "airbnb"),
+    ).toBe("Task created for Ravi (maintenance)");
     expect(resultText({ ...task, task: { ...TASK, assignee: "host" } }, "airbnb")).toBe(
       "Task added to your own list",
     );

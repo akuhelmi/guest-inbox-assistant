@@ -35,7 +35,7 @@ HELP = (
     '- "Who is waiting too long?" or "Which ones need me?"\n'
     '- "Draft replies for check-in questions" (or complaints, maintenance, bookings)\n'
     '- "Draft a reply to Priya", "Create the task for Priya", "Mark Tom done"\n'
-    '- "What\'s the Wi-Fi at Seaview Loft?"\n'
+    '- "What\'s the Wi-Fi at Bangsar Loft?"\n'
     '- "Summarise today"'
 )
 

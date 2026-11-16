@@ -9,6 +9,7 @@ import json
 
 import httpx
 
+from ..seed_data import TEAM
 from ..triage.base import CATEGORY_LABELS, CONFIDENCE_LEVELS, TASK_ASSIGNEES
 from ..triage.gemini import API_URL, _error_detail
 from .base import (
@@ -24,6 +25,8 @@ from .base import (
     summary_stats,
 )
 
+TEAM_IDS: tuple[str, ...] = tuple(p["id"] for p in TEAM)
+
 PROMPT = """You are the inbox assistant of a short-term rental operator (the host).
 The host talks to you to run the guest inbox. Answer in English, short and concrete
 (1-4 sentences, or a short list with "- " lines). Use the exact numbers from "Stats".
@@ -36,7 +39,9 @@ You never send or change anything yourself. To act, propose cards in "actions":
   keys you used in "facts_used". Approving a draft marks the message replied.
 - kind "status": set the message's status to "new", "replied" or "done".
 - kind "task": one job for the team: "task_title" (short, English), "task_assignee"
-  (cleaner, maintenance or host) and "task_due_minutes".
+  (cleaner, maintenance or host) and "task_due_minutes". Leave "task_person" empty and the app
+  picks the nearest free person. Set it (a team id) only when the host names someone or the
+  team's day below makes one person clearly right; say why in your reply.
 Only use message ids from the inbox below. Propose at most {max_cards} cards, only when the
 host asks for something to be done (handle, draft, reply, create, mark, close...). For questions
 (what, who, how many) just answer and put the message ids you mention in "highlight".
@@ -52,6 +57,7 @@ Inbox (id | guest | property | topic | urgent | status | wait | needs host | lan
 tasks | saved task suggestion):
 {inbox}
 
+{team}
 {focus}
 Conversation so far:
 {history}
@@ -77,6 +83,7 @@ ACTION_SCHEMA = {
         "task_title": {"type": "STRING"},
         "task_assignee": {"type": "STRING", "enum": ["none", *TASK_ASSIGNEES]},
         "task_due_minutes": {"type": "INTEGER"},
+        "task_person": {"type": "STRING", "enum": ["", *TEAM_IDS]},
     },
     "required": ["kind", "message_id"],
 }
@@ -116,7 +123,13 @@ def build_prompt(item: AgentInput) -> str:
     stats = summary_stats(item.items, sum(len(i.open_tasks) for i in item.items))
     target = item.item(item.focus_id) if item.focus_id is not None else None
     focus = FOCUS.format(id=target.id, guest=target.guest_name) if target else ""
+    team = (
+        "Team today (id: name, role, now):\n" + "\n".join(t[:200] for t in item.team[:12])
+        if item.team
+        else ""
+    )
     return PROMPT.format(
+        team=team,
         focus=focus,
         max_cards=MAX_CARDS,
         stats=json.dumps(stats),
@@ -157,10 +170,11 @@ def _card(raw: dict, item: AgentInput) -> Card | None:
         if status not in STATUSES:
             return None
         return Card(kind="status", message_id=target.id, status=status)
-    title, assignee, due = (
+    title, assignee, due, person = (
         raw.get("task_title"),
         raw.get("task_assignee"),
         raw.get("task_due_minutes"),
+        raw.get("task_person"),
     )
     if not isinstance(title, str) or not title.strip() or assignee not in TASK_ASSIGNEES:
         return None
@@ -170,6 +184,7 @@ def _card(raw: dict, item: AgentInput) -> Card | None:
         task_title=title.strip()[:120],
         task_assignee=assignee,
         task_due_minutes=min(max(int(due), 5), 7 * 24 * 60) if isinstance(due, int) else 60,
+        task_person=person if person in TEAM_IDS else "",
     )
 
 

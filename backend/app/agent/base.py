@@ -64,6 +64,7 @@ class AgentInput:
     properties: tuple[PropertyInfo, ...]
     history: tuple[Turn, ...] = ()
     focus_id: int | None = None  # the message the host has open
+    team: tuple[str, ...] = ()  # the team's day, one line per person
 
     def item(self, message_id: int) -> InboxItem | None:
         return next((i for i in self.items if i.id == message_id), None)
@@ -86,6 +87,7 @@ class Card:
     task_title: str = ""
     task_assignee: str = ""
     task_due_minutes: int = 0
+    task_person: str = ""  # a team member id, when the AI picked one
 
 
 @dataclass(frozen=True)

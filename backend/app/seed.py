@@ -25,7 +25,7 @@ CHANNELS = ("airbnb", "booking", "airbnb", "direct")
 SAVED = "saved example"
 
 # Bump whenever the demo tables or the seed data change shape.
-DATA_VERSION = "4"  # 3: tasks, starting status, seeded_at; 4: channel
+DATA_VERSION = "5"  # 3: tasks, starting status, seeded_at; 4: channel; 5: KL area + team
 
 # Tables kept across data versions: everything else is demo data and gets rebuilt.
 KEPT_TABLES = {AppMeta.__tablename__, RateHit.__tablename__}

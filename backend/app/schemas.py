@@ -22,6 +22,8 @@ class TaskSuggestion(BaseModel):
     assignee: str
     assignee_label: str
     due_minutes: int
+    # A team member the AI picked by name (see /api/team); empty = the app picks one.
+    person: str = ""
 
 
 class TriageOut(BaseModel):
@@ -37,6 +39,30 @@ class TriageOut(BaseModel):
     needs_host: bool
     facts_used: list[FactRef]
     suggested_task: TaskSuggestion | None = None
+
+
+class TeamPersonOut(BaseModel):
+    id: str
+    name: str
+    role: str
+    base: str
+    skills: list[str]
+    # Driving minutes to each property, by property id.
+    travel: dict[int, int]
+
+
+class TeamJobOut(BaseModel):
+    person: str
+    property_id: int
+    title: str
+    # Minutes from the start of the visitor's demo.
+    start: int
+    minutes: int
+
+
+class TeamOut(BaseModel):
+    people: list[TeamPersonOut]
+    jobs: list[TeamJobOut]
 
 
 class PropertyOut(BaseModel):
@@ -112,6 +138,8 @@ class AgentRequest(BaseModel):
     message_id: int | None = None
     history: list[AgentTurn] = Field(default_factory=list, max_length=20)
     state: AgentState = Field(default_factory=AgentState)
+    # The team's day as the browser sees it ("Aiman: busy, Aircon service until 3:30 pm").
+    team: list[str] = Field(default_factory=list, max_length=12)
 
 
 class CardOut(BaseModel):

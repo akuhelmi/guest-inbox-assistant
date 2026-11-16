@@ -8,24 +8,24 @@ provider on the same text.
 # Fact sheets: the only property details a draft may use. Invented, like everything else.
 PROPERTIES: list[dict] = [
     {
-        "key": "seaview",
-        "name": "Seaview Loft",
-        "city": "Penang",
+        "key": "bangsar",
+        "name": "Bangsar Loft",
+        "city": "Bangsar, Kuala Lumpur",
         "facts": {
             "check_in": "From 3pm, self check-in with a smart lock (code sent on arrival day)",
             "check_out": "By 11am",
-            "wifi": "Network SeaviewLoft-Guest, password seaview2026",
+            "wifi": "Network BangsarLoft-Guest, password bangsar2026",
             "parking": "One free bay in the basement, B1-07",
             "house_rules": "No smoking, no parties, quiet hours 11pm to 7am",
             "utilities": "Main water valve: cupboard under the kitchen sink (red handle). "
             "Gas valve: behind the stove",
-            "caretaker": "On call 24/7 through this chat; plumber and technician on call",
+            "caretaker": "Our maintenance and cleaning team covers all of KL, 10 to 40 min away",
         },
     },
     {
         "key": "garden",
         "name": "Garden Terrace House",
-        "city": "Ipoh",
+        "city": "Petaling Jaya",
         "facts": {
             "check_in": "From 1pm (cleaning until 1pm), self check-in with a lockbox at any "
             "time after that; bags can be dropped from 10am",
@@ -34,13 +34,13 @@ PROPERTIES: list[dict] = [
             "parking": "Private driveway for 2 cars",
             "pets": "Small dogs welcome, one-off cleaning fee RM40; garden fully fenced",
             "house_rules": "Quiet hours after 11pm (residents' association rule)",
-            "nearby": "Breakfast: Kedai Kopi Sin Yoon Loong, 7-minute walk, opens 7am",
+            "nearby": "Breakfast: Kopitiam Mesra, 7-minute walk, opens 7am",
         },
     },
     {
         "key": "skyline",
         "name": "Skyline Studio 12B",
-        "city": "Kuala Lumpur",
+        "city": "KLCC, Kuala Lumpur",
         "facts": {
             "check_in": "From 3pm, door code sent by message on arrival day; backup lockbox "
             "code available from the host",
@@ -49,23 +49,23 @@ PROPERTIES: list[dict] = [
             "parking": "Visitor parking on level P2: take a ticket, the host sends a free exit "
             "pass; lift lobby next to bay 40",
             "house_rules": "No smoking; pool open 7am to 10pm",
-            "caretaker": "Aiman, about 15 minutes away",
+            "caretaker": "Our maintenance and cleaning team covers all of KL, 10 to 40 min away",
         },
     },
     {
         "key": "kampung",
         "name": "Kampung Chalet",
-        "city": "Langkawi",
+        "city": "Hulu Langat, Selangor",
         "facts": {
             "check_in": "From 2pm, the caretaker meets you at the chalet",
             "check_out": "By 11am; late check-out until 2pm is free when there is no arrival "
             "that day",
-            "wifi": "Network KampungChalet, password pantaicenang",
+            "wifi": "Network KampungChalet, password hululangat",
             "parking": "Free parking next to the chalet",
             "max_guests": "Sleeps up to 4; extra guest fee RM50 per night",
             "cancellation": "Free cancellation up to 7 days before arrival",
             "utilities": "Fuse box behind the front door",
-            "caretaker": "About 20 minutes away",
+            "caretaker": "Our maintenance and cleaning team covers all of KL, 10 to 40 min away",
         },
     },
 ]
@@ -90,10 +90,10 @@ MESSAGES: list[dict] = [
         "reason": "Guests are locked out at arrival with children.",
         "draft": "Hi Daniel, I'm so sorry, I'm on it right now. I'm calling you in the next "
         "2 minutes and sending the backup lockbox code by message. If the door still won't "
-        "open, our caretaker Aiman can be there within 15 minutes.",
+        "open, someone from our team will come over straight away.",
     },
     {
-        "property": "seaview",
+        "property": "bangsar",
         "guest": "Priya Nair",
         "task": {
             "title": "Plumber: ceiling leak in the bathroom",
@@ -167,7 +167,7 @@ MESSAGES: list[dict] = [
         "deep-clean the bathroom. I'll also look into what went wrong with this turnover.",
     },
     {
-        "property": "seaview",
+        "property": "bangsar",
         "guest": "Sophie Martin",
         "task": {
             "title": "Technician: bedroom aircon blinking red",
@@ -197,7 +197,7 @@ MESSAGES: list[dict] = [
         "category": "general_question",
         "urgent": False,
         "reason": "Asks for a local breakfast recommendation.",
-        "draft": "Hi Rajesh, great question! Try Kedai Kopi Sin Yoon Loong, a 7-minute walk "
+        "draft": "Hi Rajesh, great question! Try Kopitiam Mesra, a 7-minute walk "
         "away, for white coffee and kaya toast. It opens at 7am and gets busy after 9.",
     },
     {
@@ -229,7 +229,7 @@ MESSAGES: list[dict] = [
         "and I'll send you a free exit pass for your stay. The lift lobby is right next to bay 40.",
     },
     {
-        "property": "seaview",
+        "property": "bangsar",
         "guest": "Oliver Brown",
         "task": {
             "title": "Gas check: smell at the stove",
@@ -306,7 +306,7 @@ MESSAGES: list[dict] = [
         "technician and drop off a mobile hotspot in the meantime.",
     },
     {
-        "property": "seaview",
+        "property": "bangsar",
         "guest": "Farid Ismail",
         "facts_used": [],
         "confidence": "high",
@@ -316,7 +316,7 @@ MESSAGES: list[dict] = [
         "urgent": False,
         "reason": "Thank-you message, no action needed.",
         "draft": "Hi Farid, thank you so much, it was a pleasure hosting you! We'd love to have "
-        "you back at Seaview Loft anytime. Safe travels home.",
+        "you back at Bangsar Loft anytime. Safe travels home.",
     },
     {
         "property": "garden",
@@ -363,7 +363,7 @@ MESSAGES: list[dict] = [
         "sink; if that doesn't fix it, our handyman can come within 2 hours. Just let me know.",
     },
     {
-        "property": "seaview",
+        "property": "bangsar",
         "guest": "James Taylor",
         "task": {
             "title": "Pest control, then deep-clean the kitchen",
@@ -445,9 +445,9 @@ MESSAGES: list[dict] = [
         "category": "maintenance",
         "urgent": True,
         "reason": "No water at all since the morning.",
-        "draft": "Hai Hafiz, maaf atas kesulitan ini. Kami sedang uruskan sekarang: Aiman, "
-        "penjaga kami, akan tiba dalam masa 15 minit untuk memeriksa bekalan air. Saya akan "
-        "hubungi anda sebentar lagi.",
+        "draft": "Hai Hafiz, maaf atas kesulitan ini. Kami sedang uruskan sekarang: pasukan "
+        "penyelenggaraan kami akan datang secepat mungkin untuk memeriksa bekalan air. "
+        "Saya akan hubungi anda sebentar lagi.",
         "facts_used": ["caretaker"],
         "confidence": "high",
     },
@@ -468,7 +468,7 @@ MESSAGES: list[dict] = [
         "confidence": "high",
     },
     {
-        "property": "seaview",
+        "property": "bangsar",
         "guest": "Wang Li",
         "minutes_ago": 40,
         "language": "zh",
@@ -476,7 +476,7 @@ MESSAGES: list[dict] = [
         "category": "general_question",
         "urgent": False,
         "reason": "Asks for the Wi-Fi password.",
-        "draft": "Wang Li，您好！WiFi 网络名称是 SeaviewLoft-Guest，密码是 seaview2026。"
+        "draft": "Wang Li，您好！WiFi 网络名称是 BangsarLoft-Guest，密码是 bangsar2026。"
         "如果连接不上，请随时告诉我。",
         "facts_used": ["wifi"],
         "confidence": "high",
@@ -508,5 +508,89 @@ MESSAGES: list[dict] = [
         "voitures. L'arrivée est possible à partir de 13h avec la boîte à clés. Bon voyage !",
         "facts_used": ["parking", "check_in"],
         "confidence": "high",
+    },
+]
+
+
+# The demo team (D23). Invented people, all based around Kuala Lumpur, so everyone can reach
+# every property; the nearest free person gets the job. "skills" match the task assignee kinds.
+TEAM: list[dict] = [
+    {
+        "id": "aiman",
+        "name": "Aiman",
+        "role": "Maintenance",
+        "base": "Cheras",
+        "skills": ["maintenance"],
+    },
+    {
+        "id": "ravi",
+        "name": "Ravi",
+        "role": "Maintenance",
+        "base": "Petaling Jaya",
+        "skills": ["maintenance"],
+    },
+    {"id": "lina", "name": "Lina", "role": "Cleaning", "base": "Bangsar", "skills": ["cleaner"]},
+    {
+        "id": "joyce",
+        "name": "Joyce",
+        "role": "Cleaning",
+        "base": "Mont Kiara",
+        "skills": ["cleaner"],
+    },
+    {
+        "id": "rosli",
+        "name": "Rosli",
+        "role": "All-rounder",
+        "base": "Ampang",
+        "skills": ["maintenance", "cleaner"],
+    },
+]
+
+# Driving minutes from each person's base to each property (fixed, invented, KL traffic).
+TRAVEL_MINUTES: dict[str, dict[str, int]] = {
+    "aiman": {"skyline": 20, "bangsar": 25, "garden": 35, "kampung": 25},
+    "ravi": {"skyline": 30, "bangsar": 15, "garden": 10, "kampung": 50},
+    "lina": {"skyline": 15, "bangsar": 5, "garden": 15, "kampung": 45},
+    "joyce": {"skyline": 20, "bangsar": 15, "garden": 20, "kampung": 50},
+    "rosli": {"skyline": 15, "bangsar": 25, "garden": 35, "kampung": 20},
+}
+
+# Today's booked jobs (D24). Times are minutes from the start of the visitor's demo, so
+# someone is always busy "now" whenever the demo is opened.
+JOBS: list[dict] = [
+    {
+        "person": "aiman",
+        "property": "garden",
+        "title": "Aircon service",
+        "start": -20,
+        "minutes": 110,
+    },
+    {
+        "person": "ravi",
+        "property": "bangsar",
+        "title": "Water heater check",
+        "start": 60,
+        "minutes": 60,
+    },
+    {
+        "person": "lina",
+        "property": "skyline",
+        "title": "Turnover clean",
+        "start": -30,
+        "minutes": 90,
+    },
+    {
+        "person": "joyce",
+        "property": "garden",
+        "title": "Turnover clean",
+        "start": 120,
+        "minutes": 120,
+    },
+    {
+        "person": "rosli",
+        "property": "kampung",
+        "title": "Garden and pool clean-up",
+        "start": 30,
+        "minutes": 60,
     },
 ]

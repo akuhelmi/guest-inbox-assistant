@@ -7,6 +7,7 @@ import type {
   Meta,
   Property,
 } from "./types";
+import type { Team } from "./lib/team";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -30,6 +31,7 @@ export const api = {
   meta: () => request<Meta>("/api/meta"),
   messages: () => request<Message[]>("/api/messages"),
   properties: () => request<Property[]>("/api/properties"),
+  team: () => request<Team>("/api/team"),
   retriage: (id: number) =>
     request<LiveTriage>(`/api/messages/${id}/triage`, { method: "POST" }),
   triageText: (body: string, guestName: string, propertyId: number | null) =>
@@ -38,9 +40,15 @@ export const api = {
       body: JSON.stringify({ body, guest_name: guestName, property_id: propertyId }),
     }),
   /** One turn with the inbox assistant. An empty text asks for the opening briefing. */
-  agent: (text: string, history: AgentTurn[], state: AgentStateIn, messageId?: number) =>
+  agent: (
+    text: string,
+    history: AgentTurn[],
+    state: AgentStateIn,
+    messageId?: number,
+    team: string[] = [],
+  ) =>
     request<AgentReply>("/api/agent", {
       method: "POST",
-      body: JSON.stringify({ text, history, state, message_id: messageId ?? null }),
+      body: JSON.stringify({ text, history, state, message_id: messageId ?? null, team }),
     }),
 };

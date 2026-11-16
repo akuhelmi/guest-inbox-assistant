@@ -44,6 +44,10 @@ export interface TaskSuggestion {
   assignee: "host" | "cleaner" | "maintenance";
   assignee_label: string;
   due_minutes: number;
+  /** A team member id (the AI named one, or the app picked the nearest free one). */
+  person?: string;
+  /** "Ravi (maintenance)", set by the app for the plan. */
+  person_label?: string;
 }
 
 export type Status = "new" | "replied" | "done";

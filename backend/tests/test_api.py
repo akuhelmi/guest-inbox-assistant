@@ -102,9 +102,9 @@ def test_rate_window_resets_next_hour(client):
 def test_properties_list_their_fact_sheets(client):
     props = client.get("/api/properties").json()
     assert [p["name"] for p in props] == [p["name"] for p in PROPERTIES]
-    seaview = props[0]
-    wifi = next(f for f in seaview["facts"] if f["key"] == "wifi")
-    assert wifi["label"] == "Wi-Fi" and "seaview2026" in wifi["value"]
+    first = props[0]
+    wifi = next(f for f in first["facts"] if f["key"] == "wifi")
+    assert wifi["label"] == "Wi-Fi" and "bangsar2026" in wifi["value"]
 
 
 def test_messages_carry_language_confidence_and_facts_used(client):
@@ -190,6 +190,7 @@ def test_saved_messages_offer_their_suggested_task(client):
         "assignee": "maintenance",
         "assignee_label": "Maintenance",
         "due_minutes": 30,
+        "person": "",
     }
     assert msgs["Farid Ismail"]["triage"]["suggested_task"] is None
 
@@ -225,3 +226,17 @@ def test_older_saved_messages_start_replied_or_done(client):
         received = datetime.fromisoformat(m["received_at"])
         replied = datetime.fromisoformat(m["replied_at"])
         assert received < replied
+
+
+def test_team_lists_people_travel_times_and_jobs(client):
+    team = client.get("/api/team").json()
+    props = {p["id"] for p in client.get("/api/properties").json()}
+    assert [p["name"] for p in team["people"]] == ["Aiman", "Ravi", "Lina", "Joyce", "Rosli"]
+    for person in team["people"]:
+        # Everyone can reach every property (all in the KL area).
+        assert {int(k) for k in person["travel"]} == props
+        assert all(5 <= m <= 60 for m in person["travel"].values())
+    ids = {p["id"] for p in team["people"]}
+    assert team["jobs"] and all(j["person"] in ids for j in team["jobs"])
+    # Someone is busy when the demo starts.
+    assert any(j["start"] <= 0 < j["start"] + j["minutes"] for j in team["jobs"])

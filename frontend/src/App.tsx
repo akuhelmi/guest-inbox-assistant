@@ -19,8 +19,10 @@ import { countByFilter, filterMessages } from "./lib/inbox";
 import {
   type Proposal,
   type Threads,
+  type Staffer,
   addHostTurn,
   addReply,
+  addTurns,
   agreePlan,
   channelLabel,
   ensureThread,
@@ -46,13 +48,27 @@ import {
   loadState,
   messageKey,
   saveState,
+  addTask,
+  confirmTask,
+  reassignTask,
   setStatus,
   statusOf,
   toggleTask,
   waitInfo,
 } from "./lib/workflow";
 import type { AgentReply, AgentTurn, Filter, LiveTriage, Message, Meta, Property } from "./types";
-import { TasksView, WaitChip } from "./workflow-ui";
+import {
+  type Team,
+  anchorOf,
+  assign,
+  clock,
+  daySlots,
+  escalate,
+  notifyText,
+  personLabel,
+  teamLines,
+} from "./lib/team";
+import { TasksView, TeamDay, WaitChip } from "./workflow-ui";
 import { MessageWorkspace } from "./workspace-ui";
 
 type View = "inbox" | "tasks";
@@ -93,7 +109,11 @@ export default function App() {
   const [meta, setMeta] = useState<Meta | null>(null);
   const [properties, setProperties] = useState<Property[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [demo, setDemo] = useState<DemoState>(() => loadState(browserStorage()));
+  const [demo, setDemo] = useState<DemoState>(() => {
+    const saved = loadState(browserStorage());
+    return saved.startedAt ? saved : { ...saved, startedAt: Date.now() };
+  });
+  const [team, setTeam] = useState<Team>({ people: [], jobs: [] });
   const [chat, setChat] = useState<ChatEntry[]>(() => loadChat(browserStorage()));
   const [threads, setThreads] = useState<Threads>(() => loadThreads(browserStorage()));
   const [busy, setBusy] = useState(false);
@@ -120,11 +140,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    Promise.all([api.messages(), api.meta(), api.properties()])
-      .then(([msgs, m, props]) => {
+    Promise.all([api.messages(), api.meta(), api.properties(), api.team()])
+      .then(([msgs, m, props, t]) => {
         setMessages(msgs);
         setMeta(m);
         setProperties(props);
+        setTeam(t);
       })
       .catch((e: Error) => setLoadError(e.message));
   }, []);
@@ -169,13 +190,24 @@ export default function App() {
     }
     return c;
   }, [messages, demo]);
+  const slots = useMemo(
+    () => daySlots(team, demo.tasks, anchorOf(demo, now)),
+    [team, demo, now],
+  );
+  const staff: Staffer = (task, m) => {
+    if (!team.people.length) return { person: "", label: "" };
+    const a = assign(team, slots, task, m.property_id, Date.now(), {
+      pick: task.person || undefined,
+    });
+    return { person: a.person, label: personLabel(team, a.person) };
+  };
   const open = messages.find((m) => m.id === openId) ?? null;
   const next = open ? nextInQueue(messages, demo, open.id, now) : null;
 
   function openMessage(id: number) {
     const m = messages.find((x) => x.id === id);
     if (!m) return;
-    setThreads((t) => ensureThread(t, m, demo));
+    setThreads((t) => ensureThread(t, m, demo, staff));
     setView("inbox");
     setAskOpen(false);
     setOpenId(id);
@@ -191,14 +223,63 @@ export default function App() {
   }
 
   function approveProposals(m: Message, picked: Proposal[]) {
-    setDemo((d) =>
-      picked.reduce((acc, p) => applyCard(acc, p, messages, { task: p.task ?? undefined }), d),
-    );
+    const at = Date.now();
+    for (const p of picked) {
+      if (p.kind === "task" && p.task && team.people.length) {
+        // The team logic picks (or checks) the person and their timing.
+        const a = assign(team, slots, p.task, m.property_id, at, {
+          pick: p.task.person || undefined,
+        });
+        const taskId = `${messageKey(m)}:${at}`;
+        setDemo((d) => addTask(d, m, p.task!, at, a));
+        setThreads((t) =>
+          resolveStep(t, m, demo, p.pid, "approved", resultText(p, m.channel), {
+            role: "assistant",
+            text: `${a.note} ${notifyText(team, a)}`.trim(),
+            by: "saved",
+            escalation: a.person === "host" ? undefined : taskId,
+          }),
+        );
+        continue;
+      }
+      setDemo((d) => applyCard(d, p, messages, { task: p.task ?? undefined }, at));
+      setThreads((t) => resolveStep(t, m, demo, p.pid, "approved", resultText(p, m.channel)));
+    }
+  }
+
+  /** Demo only: the person didn't answer, so the job passes to the next one. */
+  function noAnswer(m: Message, taskId: string) {
+    const task = demo.tasks.find((t) => t.id === taskId);
+    if (!task) return;
+    const at = Date.now();
+    const { assignment, text } = escalate(team, slots, task, task.propertyId ?? m.property_id, at);
+    setDemo((d) => reassignTask(d, taskId, assignment, at));
     setThreads((t) =>
-      picked.reduce(
-        (acc, p) => resolveStep(acc, m, demo, p.pid, "approved", resultText(p, m.channel)),
-        t,
-      ),
+      addTurns(t, m, demo, [
+        { role: "host", text: `Simulate: no answer from ${task.personName ?? "them"}`, action: true },
+        {
+          role: "assistant",
+          text,
+          by: "saved",
+          escalation: assignment.person === "host" ? undefined : taskId,
+        },
+      ]),
+    );
+  }
+
+  function confirmed(m: Message, taskId: string) {
+    const task = demo.tasks.find((t) => t.id === taskId);
+    if (!task) return;
+    setDemo((d) => confirmTask(d, taskId));
+    setThreads((t) =>
+      addTurns(t, m, demo, [
+        { role: "host", text: `Simulate: ${task.personName} confirms`, action: true },
+        {
+          role: "assistant",
+          text: `${task.personName} confirmed: on the way, arrives about ${clock(task.arrivesAt ?? Date.now())}.`,
+          by: "saved",
+        },
+      ]),
     );
   }
 
@@ -208,8 +289,14 @@ export default function App() {
     setThreads((t) => addHostTurn(t, m, demo, text));
     setWsBusy(true);
     try {
-      const reply = await api.agent(text, history, agentState(messages, demo), m.id);
-      setThreads((t) => addReply(t, m, demo, reply));
+      const reply = await api.agent(
+        text,
+        history,
+        agentState(messages, demo),
+        m.id,
+        teamLines(team, slots, Date.now()),
+      );
+      setThreads((t) => addReply(t, m, demo, reply, Date.now(), staff));
       if (reply.ai_left_today !== null) setAiLeft(reply.ai_left_today);
     } catch (e) {
       setThreads((t) => addReply(t, m, demo, errorReply((e as Error).message)));
@@ -252,7 +339,7 @@ export default function App() {
   }
 
   function reset() {
-    setDemo(EMPTY_STATE);
+    setDemo({ ...EMPTY_STATE, startedAt: Date.now() });
     setChat([]);
     setThreads({});
     setOpenId(null);
@@ -357,6 +444,8 @@ export default function App() {
 
           {view === "tasks" ? (
             <section className="tasks-panel">
+              <TeamDay team={team} slots={slots} properties={properties} now={now} />
+              <h3 className="tasks-head">Tasks</h3>
               <TasksView
                 tasks={demo.tasks}
                 onToggle={(id) => setDemo((s) => toggleTask(s, id))}
@@ -434,6 +523,17 @@ export default function App() {
               status={statusOf(open, demo).status}
               wait={waitInfo(open, demo, now)}
               thread={threadFor(threads, open, demo)}
+              team={team}
+              tasks={demo.tasks}
+              assignFor={(task) =>
+                team.people.length
+                  ? assign(team, slots, task, open.property_id, now, {
+                      pick: task.person || undefined,
+                    })
+                  : null
+              }
+              onNoAnswer={(id) => noAnswer(open, id)}
+              onConfirm={(id) => confirmed(open, id)}
               busy={wsBusy}
               aiLabel={aiLabel}
               onClose={() => {

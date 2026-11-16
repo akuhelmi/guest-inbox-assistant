@@ -11,7 +11,8 @@ import {
   currentStep,
   sendLabel,
 } from "./lib/proposals";
-import { STATUS_LABELS, type WaitInfo } from "./lib/workflow";
+import { type Assignment, HOST, type Team } from "./lib/team";
+import { STATUS_LABELS, type Task, type WaitInfo } from "./lib/workflow";
 import type { Message, Property, Status, TaskSuggestion } from "./types";
 import { WaitChip } from "./workflow-ui";
 
@@ -29,12 +30,17 @@ function dueText(minutes: number): string {
 function ProposalCard({
   p,
   channel,
+  team,
+  assignFor,
   onApprove,
   onChange,
   onDismiss,
 }: {
   p: Proposal;
   channel: string;
+  team: Team;
+  /** Who would do this task now, and why (null before the team has loaded). */
+  assignFor: (task: TaskSuggestion) => Assignment | null;
   onApprove: () => void;
   onChange: (change: Partial<Pick<Proposal, "draft" | "task">>) => void;
   onDismiss: () => void;
@@ -117,10 +123,17 @@ function ProposalCard({
                 onChange={(e) => {
                   const a = ASSIGNEES.find((x) => x.key === e.target.value) ?? ASSIGNEES[0];
                   onChange({
-                    task: { ...p.task!, assignee: a.key, assignee_label: a.label.replace(" (me)", "") },
+                    task: {
+                      ...p.task!,
+                      assignee: a.key,
+                      assignee_label: a.label.replace(" (me)", ""),
+                      // A new kind of job: let the team logic pick again.
+                      person: "",
+                      person_label: undefined,
+                    },
                   });
                 }}
-                aria-label="Who"
+                aria-label="Kind of job"
               >
                 {ASSIGNEES.map((a) => (
                   <option key={a.key} value={a.key}>
@@ -145,8 +158,12 @@ function ProposalCard({
             </div>
           ) : (
             <p className="acard-task">
-              {p.task.title} · {p.task.assignee_label} · within {dueText(p.task.due_minutes)}
+              {p.task.title} · {p.task.person_label || p.task.assignee_label} · within{" "}
+              {dueText(p.task.due_minutes)}
             </p>
+          )}
+          {pending && team.people.length > 0 && p.task.assignee !== "host" && (
+            <PersonPicker p={p} team={team} assignFor={assignFor} onChange={onChange} />
           )}
         </>
       )}
@@ -202,20 +219,55 @@ function PlanList({ plan }: { plan: PlanLine[] }) {
   );
 }
 
+function EscalationActions({
+  task,
+  onNoAnswer,
+  onConfirm,
+}: {
+  task: Task | undefined;
+  onNoAnswer: (taskId: string) => void;
+  onConfirm: (taskId: string) => void;
+}) {
+  if (!task || task.done || task.confirmed || !task.person || task.person === HOST) return null;
+  return (
+    <div className="review-actions">
+      <button type="button" className="btn btn-secondary btn-small" onClick={() => onNoAnswer(task.id)}>
+        Simulate: no answer
+      </button>
+      <button type="button" className="btn btn-secondary btn-small" onClick={() => onConfirm(task.id)}>
+        Simulate: {task.personName} confirms
+      </button>
+    </div>
+  );
+}
+
 function TurnView({
   turn,
   lastPlan,
+  lastEscalation,
   thread,
   current,
   agreed,
   channel,
+  team,
+  tasks,
+  assignFor,
   onAgree,
   onApprove,
   onChange,
   onDismiss,
   onNext,
+  onNoAnswer,
+  onConfirm,
 }: {
   turn: ThreadTurn;
+  /** The newest escalation message for its task: only it gets the buttons. */
+  lastEscalation: boolean;
+  team: Team;
+  tasks: Task[];
+  assignFor: (task: TaskSuggestion) => Assignment | null;
+  onNoAnswer: (taskId: string) => void;
+  onConfirm: (taskId: string) => void;
   /** The newest plan in the thread: only it gets the Agree button. */
   lastPlan: boolean;
   thread: Thread;
@@ -258,6 +310,8 @@ function TurnView({
           <ProposalCard
             p={step}
             channel={channel}
+            team={team}
+            assignFor={assignFor}
             onApprove={() => onApprove(step)}
             onChange={(change) => onChange(step, change)}
             onDismiss={() => onDismiss(step)}
@@ -265,6 +319,13 @@ function TurnView({
         ) : (
           <p className="muted small">Replaced by a newer version below.</p>
         ))}
+      {turn.escalation && lastEscalation && (
+        <EscalationActions
+          task={tasks.find((t) => t.id === turn.escalation)}
+          onNoAnswer={onNoAnswer}
+          onConfirm={onConfirm}
+        />
+      )}
       {turn.end && onNext && (
         <div className="review-actions">
           <button type="button" className="btn btn-small" onClick={onNext}>
@@ -277,12 +338,64 @@ function TurnView({
   );
 }
 
+function PersonPicker({
+  p,
+  team,
+  assignFor,
+  onChange,
+}: {
+  p: Proposal;
+  team: Team;
+  assignFor: (task: TaskSuggestion) => Assignment | null;
+  onChange: (change: Partial<Pick<Proposal, "draft" | "task">>) => void;
+}) {
+  const task = p.task!;
+  const a = assignFor(task);
+  const people = team.people.filter((x) => x.skills.includes(task.assignee));
+  return (
+    <div className="person-pick">
+      <label className="small">
+        Send to{" "}
+        <select
+          className="input input-inline"
+          value={a?.person ?? ""}
+          onChange={(e) => {
+            const id = e.target.value;
+            const person = team.people.find((x) => x.id === id);
+            onChange({
+              task: {
+                ...task,
+                person: id,
+                person_label: person ? `${person.name} (${person.role.toLowerCase()})` : "you (host)",
+              },
+            });
+          }}
+          aria-label="Who does it"
+        >
+          {people.map((x) => (
+            <option key={x.id} value={x.id}>
+              {x.name} · {x.role} · {x.base}
+            </option>
+          ))}
+          <option value={HOST}>Me (host)</option>
+        </select>
+      </label>
+      {a && <p className={`assign-note small${a.late ? " assign-late" : ""}`}>{a.note}</p>}
+    </div>
+  );
+}
+
 export function MessageWorkspace({
   message,
   property,
   status,
   wait,
   thread,
+  team,
+  tasks,
+  assignFor,
+  onNoAnswer,
+  onConfirm,
   busy,
   aiLabel,
   onClose,
@@ -299,6 +412,12 @@ export function MessageWorkspace({
   status: Status;
   wait: WaitInfo;
   thread: Thread;
+  team: Team;
+  /** Every task in the demo (escalation turns look theirs up). */
+  tasks: Task[];
+  assignFor: (task: TaskSuggestion) => Assignment | null;
+  onNoAnswer: (taskId: string) => void;
+  onConfirm: (taskId: string) => void;
   busy: boolean;
   aiLabel: string;
   onClose: () => void;
@@ -314,6 +433,10 @@ export function MessageWorkspace({
   const logRef = useRef<HTMLDivElement>(null);
   const current = currentStep(thread);
   const lastPlan = thread.turns.reduce((found, x, i) => (x.plan ? i : found), -1);
+  const lastEscalation = new Map<string, number>();
+  thread.turns.forEach((x, i) => {
+    if (x.escalation) lastEscalation.set(x.escalation, i);
+  });
   const agreed = Boolean(thread.agreed);
   const t = message.triage;
 
@@ -393,7 +516,13 @@ export function MessageWorkspace({
               key={i}
               turn={turn}
               lastPlan={i === lastPlan}
+              lastEscalation={turn.escalation ? lastEscalation.get(turn.escalation) === i : false}
               thread={thread}
+              team={team}
+              tasks={tasks}
+              assignFor={assignFor}
+              onNoAnswer={onNoAnswer}
+              onConfirm={onConfirm}
               current={current}
               agreed={agreed}
               channel={message.channel}

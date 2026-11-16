@@ -28,12 +28,17 @@ export function sendLabel(channel: string): string {
   return "Send on Airbnb";
 }
 
-/** The demo team who gets nudged when a task is created. Invented, like all demo data. */
-export const TEAM: Record<TaskSuggestion["assignee"], { name: string; how: string } | null> = {
-  maintenance: { name: "Aiman (maintenance)", how: "WhatsApp, with a call in 10 min if not acknowledged" },
-  cleaner: { name: "Siti (cleaning)", how: "WhatsApp, with a call in 10 min if not acknowledged" },
-  host: null,
-};
+/**
+ * Picks who does a task (see lib/team.ts): the app passes one in so plans name a person.
+ * Returns the person id and a label like "Ravi (maintenance)".
+ */
+export type Staffer = (task: TaskSuggestion, m: Message) => { person: string; label: string };
+
+function staffed(p: Proposal, m: Message, staff?: Staffer): Proposal {
+  if (p.kind !== "task" || !p.task || !staff) return p;
+  const who = staff(p.task, m);
+  return { ...p, task: { ...p.task, person: who.person, person_label: who.label } };
+}
 
 export interface Proposal extends AgentCard {
   pid: string;
@@ -62,6 +67,8 @@ export interface ThreadTurn {
   plan?: PlanLine[];
   step?: string;
   action?: boolean;
+  /** A task was sent to someone: the turn offers "no answer" / "confirms" (a task id). */
+  escalation?: string;
   /** The closing "all steps done" message. */
   end?: boolean;
 }
@@ -144,10 +151,17 @@ function opening(m: Message, proposals: Proposal[]): ThreadTurn {
     : { role: "assistant", text: `${reviewText(m)} Nothing left to do here.`, by: "saved" };
 }
 
-export function threadFor(threads: Threads, m: Message, demo: DemoState): Thread {
+export function threadFor(
+  threads: Threads,
+  m: Message,
+  demo: DemoState,
+  staff?: Staffer,
+): Thread {
   const saved = threads[messageKey(m)];
   if (saved) return saved;
-  const proposals = toProposals(savedProposals(m, demo), "saved");
+  const proposals = toProposals(savedProposals(m, demo), "saved").map((p) =>
+    staffed(p, m, staff),
+  );
   return { proposals, turns: [opening(m, proposals)] };
 }
 
@@ -183,8 +197,19 @@ function put(threads: Threads, m: Message, thread: Thread): Threads {
 }
 
 /** Make sure the message has a thread saved (so its proposals keep their ids). */
-export function ensureThread(threads: Threads, m: Message, demo: DemoState): Threads {
-  return threads[messageKey(m)] ? threads : put(threads, m, threadFor(threads, m, demo));
+export function ensureThread(
+  threads: Threads,
+  m: Message,
+  demo: DemoState,
+  staff?: Staffer,
+): Threads {
+  return threads[messageKey(m)] ? threads : put(threads, m, threadFor(threads, m, demo, staff));
+}
+
+/** Add turns as they are (e.g. the escalation simulation). */
+export function addTurns(threads: Threads, m: Message, demo: DemoState, turns: ThreadTurn[]): Threads {
+  const t = threadFor(threads, m, demo);
+  return put(threads, m, { ...t, turns: [...t.turns, ...turns] });
 }
 
 export function addHostTurn(threads: Threads, m: Message, demo: DemoState, text: string): Threads {
@@ -204,6 +229,7 @@ export function addReply(
   demo: DemoState,
   reply: AgentReply,
   now: number = Date.now(),
+  staff?: Staffer,
 ): Threads {
   const t = threadFor(threads, m, demo);
   const seen = new Set<string>();
@@ -212,7 +238,7 @@ export function addReply(
     seen.add(c.kind);
     return true;
   });
-  const fresh = toProposals(cards, reply.by, now);
+  const fresh = toProposals(cards, reply.by, now).map((p) => staffed(p, m, staff));
   const finished = t.proposals.filter((p) => p.state !== "pending");
   const pending = [
     ...t.proposals.filter((p) => p.state === "pending" && !reply.plan && !seen.has(p.kind)),
@@ -252,13 +278,14 @@ export function resolveStep(
   id: string,
   state: "approved" | "dismissed",
   result?: string,
+  followUp?: ThreadTurn,
 ): Threads {
   const t = threadFor(threads, m, demo);
   const text = state === "approved" ? `✓ ${result ?? "Approved"}` : "Skip this step.";
   return put(threads, m, {
     ...t,
     proposals: t.proposals.map((p) => (p.pid === id ? { ...p, state, result } : p)),
-    turns: [...t.turns, { role: "host", text, action: true }],
+    turns: [...t.turns, { role: "host", text, action: true }, ...(followUp ? [followUp] : [])],
   });
 }
 
@@ -276,10 +303,11 @@ export function stepTitle(p: Proposal, m: Message): string {
   }
   const task = p.task;
   if (!task) return "Create a task";
-  const who = TEAM[task.assignee];
-  return who
-    ? `Create a task for ${who.name} and notify them: ${task.title}`
-    : `Add a task for yourself: ${task.title}`;
+  if (task.assignee === "host" || task.person === "host") {
+    return `Add a task for yourself: ${task.title}`;
+  }
+  const who = task.person_label ?? `the ${task.assignee === "cleaner" ? "cleaning" : "maintenance"} team`;
+  return `Create a task for ${who} and notify them: ${task.title}`;
 }
 
 /** What the message is about, in a sentence or two, from its saved triage. */
@@ -310,10 +338,9 @@ export function resultText(p: Proposal, channel: string): string {
   if (p.kind === "status") return `Marked ${p.status === "done" ? "Done" : p.status === "new" ? "New" : "Replied"}`;
   const task = p.task;
   if (!task) return "Task created";
-  const who = TEAM[task.assignee];
-  return who
-    ? `Task created. ${who.name} nudged by ${who.how} (demo)`
-    : "Task added to your own list";
+  return task.assignee === "host" || task.person === "host"
+    ? "Task added to your own list"
+    : `Task created for ${task.person_label ?? task.assignee_label}`;
 }
 
 export function loadThreads(storage: Pick<Storage, "getItem"> | undefined): Threads {

@@ -26,7 +26,7 @@ def item(id, name, **kw) -> InboxItem:
         id=id,
         guest_name=name,
         property_id=1,
-        property_name="Seaview Loft",
+        property_name="Bangsar Loft",
         category="general_question",
         urgent=False,
         needs_host=False,
@@ -39,7 +39,7 @@ def item(id, name, **kw) -> InboxItem:
     return InboxItem(**base)
 
 
-PROP = PropertyInfo(1, "Seaview Loft", "Penang", {"wifi": "Network Sea, password x1"})
+PROP = PropertyInfo(1, "Bangsar Loft", "Kuala Lumpur", {"wifi": "Network Bangsar, password x1"})
 ITEMS = (
     item(
         1,
@@ -120,7 +120,7 @@ def test_guest_commands():
 
 
 def test_facts_answer_from_the_sheet_only():
-    reply = ask("What's the wifi at Seaview Loft?")
+    reply = ask("What's the wifi at Bangsar Loft?")
     assert "password x1" in reply.text
 
 
@@ -325,7 +325,7 @@ def test_open_message_needing_host_says_so():
 
 def test_open_message_commands_and_facts():
     assert [c.kind for c in ask_about("mark it done", 2).cards] == ["status"]
-    assert "Network Sea" in ask_about("what's the wifi?", 2).text
+    assert "Network Bangsar" in ask_about("what's the wifi?", 2).text
 
 
 def test_prompt_names_the_open_message():
@@ -364,3 +364,27 @@ def test_api_messages_have_a_channel_and_agent_takes_message_id(client):
     assert all(c["message_id"] == first for c in data["cards"])
     unknown = client.post("/api/agent", json={"message_id": 99999}).json()
     assert "waiting for a reply" in unknown["text"]
+
+
+def test_prompt_carries_the_team_and_ai_may_pick_a_person():
+    item = AgentInput(
+        text="give it to Ravi",
+        items=ITEMS,
+        properties=(PROP,),
+        focus_id=2,
+        team=("ravi: Ravi, Maintenance, free now",),
+    )
+    assert "Team today" in build_prompt(item) and "ravi: Ravi" in build_prompt(item)
+    assert "Team today" not in build_prompt(AGENT_INPUT)
+    task = {
+        "kind": "task",
+        "message_id": 2,
+        "task_title": "Fix tap",
+        "task_assignee": "maintenance",
+        "task_due_minutes": 30,
+    }
+    answer = {"reply": "Ravi is free.", "highlight": [], "focus": 2}
+    picked = parse_data({**answer, "actions": [{**task, "task_person": "ravi"}]}, item, "claude")
+    assert picked.cards[0].task_person == "ravi"
+    unknown = parse_data({**answer, "actions": [{**task, "task_person": "bob"}]}, item, "claude")
+    assert unknown.cards[0].task_person == ""

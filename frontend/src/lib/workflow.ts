@@ -31,11 +31,32 @@ export interface Task {
   assigneeLabel: string;
   dueAt: number;
   done: boolean;
+  /** Who does it (a team member id or "host"), and the job's timing in their day. */
+  person?: string;
+  personName?: string;
+  propertyId?: number;
+  startAt?: number;
+  arrivesAt?: number;
+  /** People who were asked and didn't answer. */
+  tried?: string[];
+  /** Who it passes to next if nobody confirms. */
+  chain?: string[];
+  confirmed?: boolean;
+}
+
+/** Who a new task goes to (see lib/team.ts). */
+export interface TaskAssignment {
+  person: string;
+  name: string;
+  arrivesAt: number;
+  chain: string[];
 }
 
 export interface DemoState {
   statuses: Record<string, StatusEntry>;
   tasks: Task[];
+  /** When this visitor's demo day started: the team's schedule is set from it. */
+  startedAt?: number;
 }
 
 export const EMPTY_STATE: DemoState = { statuses: {}, tasks: [] };
@@ -53,6 +74,7 @@ export function loadState(storage: Pick<Storage, "getItem"> | undefined): DemoSt
     return {
       statuses: parsed.statuses && typeof parsed.statuses === "object" ? parsed.statuses : {},
       tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
+      startedAt: typeof parsed.startedAt === "number" ? parsed.startedAt : undefined,
     };
   } catch {
     return EMPTY_STATE;
@@ -97,6 +119,7 @@ export function addTask(
   m: Message,
   task: Pick<TaskSuggestion, "title" | "assignee" | "assignee_label" | "due_minutes">,
   now: number = Date.now(),
+  who?: TaskAssignment,
 ): DemoState {
   const created: Task = {
     id: `${messageKey(m)}:${now}`,
@@ -108,8 +131,54 @@ export function addTask(
     assigneeLabel: task.assignee_label,
     dueAt: now + task.due_minutes * 60000,
     done: false,
+    ...(who
+      ? {
+          person: who.person,
+          personName: who.name,
+          propertyId: m.property_id,
+          startAt: now,
+          arrivesAt: who.arrivesAt,
+          chain: who.chain,
+          tried: [],
+          confirmed: false,
+        }
+      : {}),
   };
   return { ...state, tasks: [...state.tasks, created] };
+}
+
+/** Nobody answered: the task moves to the next person (see lib/team.ts escalate). */
+export function reassignTask(
+  state: DemoState,
+  id: string,
+  who: TaskAssignment,
+  now: number = Date.now(),
+): DemoState {
+  return {
+    ...state,
+    tasks: state.tasks.map((t) =>
+      t.id === id
+        ? {
+            ...t,
+            tried: [...(t.tried ?? []), t.person ?? ""],
+            person: who.person,
+            personName: who.name,
+            assigneeLabel: who.person === "host" ? "Host" : t.assigneeLabel,
+            startAt: now,
+            arrivesAt: who.arrivesAt,
+            chain: who.chain,
+            confirmed: false,
+          }
+        : t,
+    ),
+  };
+}
+
+export function confirmTask(state: DemoState, id: string): DemoState {
+  return {
+    ...state,
+    tasks: state.tasks.map((t) => (t.id === id ? { ...t, confirmed: true } : t)),
+  };
 }
 
 export function toggleTask(state: DemoState, id: string): DemoState {

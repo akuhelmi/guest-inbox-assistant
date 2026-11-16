@@ -38,10 +38,14 @@ from .schemas import (
     MetaOut,
     PropertyOut,
     TaskSuggestion,
+    TeamJobOut,
+    TeamOut,
+    TeamPersonOut,
     TriageOut,
     TriageRequest,
 )
 from .seed import SAVED, demo_clock_offset, ensure_data
+from .seed_data import JOBS, PROPERTIES, TEAM, TRAVEL_MINUTES
 from .triage import (
     CATEGORIES,
     CATEGORY_LABELS,
@@ -191,7 +195,12 @@ def agent_input(
     known = {i.id for i in items}
     focus = payload.message_id if payload.message_id in known else None
     return AgentInput(
-        text=text, items=tuple(items), properties=props, history=history, focus_id=focus
+        text=text,
+        items=tuple(items),
+        properties=props,
+        history=history,
+        focus_id=focus,
+        team=tuple(line[:200] for line in payload.team[:12]),
     )
 
 
@@ -216,6 +225,7 @@ def _card_out(c: Card, item: AgentInput) -> CardOut:
                 assignee=c.task_assignee,
                 assignee_label=TASK_ASSIGNEES.get(c.task_assignee, c.task_assignee),
                 due_minutes=c.task_due_minutes,
+                person=c.task_person,
             )
             if c.kind == "task"
             else None
@@ -288,6 +298,35 @@ def create_app(settings: Settings | None = None, triager=None, agent=None) -> Fa
             rate_limit_per_hour=settings.rate_limit_per_hour,
             agent_limit_per_day=settings.agent_limit_per_day,
             suggestions=list(SUGGESTIONS),
+        )
+
+    @app.get("/api/team", response_model=TeamOut)
+    def team(session: Session = Depends(get_session)) -> TeamOut:
+        ids = {p.name: p.id for p in session.scalars(select(Property))}
+        by_key = {p["key"]: ids[p["name"]] for p in PROPERTIES if p["name"] in ids}
+        return TeamOut(
+            people=[
+                TeamPersonOut(
+                    **{k: person[k] for k in ("id", "name", "role", "base", "skills")},
+                    travel={
+                        by_key[key]: minutes
+                        for key, minutes in TRAVEL_MINUTES[person["id"]].items()
+                        if key in by_key
+                    },
+                )
+                for person in TEAM
+            ],
+            jobs=[
+                TeamJobOut(
+                    person=job["person"],
+                    property_id=by_key[job["property"]],
+                    title=job["title"],
+                    start=job["start"],
+                    minutes=job["minutes"],
+                )
+                for job in JOBS
+                if job["property"] in by_key
+            ],
         )
 
     @app.get("/api/properties", response_model=list[PropertyOut])

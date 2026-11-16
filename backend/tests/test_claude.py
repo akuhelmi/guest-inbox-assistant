@@ -113,7 +113,7 @@ def test_claude_triager_and_fallback():
         "draft_reply": "Hi Ana, our plumber is on the way.",
         "facts_used": ["wifi", "made_up"],
     }
-    item = TriageInput("No hot water", "Ana Costa", "Seaview Loft", facts={"wifi": "x"})
+    item = TriageInput("No hot water", "Ana Costa", "Bangsar Loft", facts={"wifi": "x"})
     result = ClaudeTriager("m", run=lambda *a, **kw: good).triage(item)
     assert result.triaged_by == "claude" and result.urgent and result.facts_used == ("wifi",)
 
