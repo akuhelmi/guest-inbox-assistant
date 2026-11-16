@@ -285,7 +285,6 @@ export function MessageWorkspace({
   thread,
   busy,
   aiLabel,
-  shift,
   onClose,
   onNext,
   onAgree,
@@ -302,8 +301,6 @@ export function MessageWorkspace({
   thread: Thread;
   busy: boolean;
   aiLabel: string;
-  /** Shift mode: "3 left" and a prominent Next button. */
-  shift: { left: number } | null;
   onClose: () => void;
   onNext: (() => void) | null;
   onAgree: () => void;
@@ -339,9 +336,8 @@ export function MessageWorkspace({
         <button type="button" className="link small" onClick={onClose}>
           ← Inbox
         </button>
-        {shift && <span className="muted small">Shift: {shift.left} left to answer</span>}
         {onNext && (
-          <button type="button" className={`btn btn-small${shift ? "" : " btn-secondary"}`} onClick={onNext}>
+          <button type="button" className="btn btn-small btn-secondary" onClick={onNext}>
             Next message →
           </button>
         )}

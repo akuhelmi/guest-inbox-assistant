@@ -103,7 +103,6 @@ export default function App() {
   const [queueView, setQueueView] = useState<QueueView>("todo");
   const [filter, setFilter] = useState<Filter>("all");
   const [openId, setOpenId] = useState<number | null>(null);
-  const [shift, setShift] = useState(false);
   // Phones show one pane at a time: the inbox, a message, or the Ask panel.
   const [askOpen, setAskOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -187,17 +186,8 @@ export default function App() {
     if (next) openMessage(next.id);
     else {
       setOpenId(null);
-      setShift(false);
-      setToast("Inbox clear: every guest has a reply. Nice shift.");
+      setToast("Inbox clear: every guest has a reply.");
     }
-  }
-
-  function startShift() {
-    setShift(true);
-    setToast(null);
-    const first = nextInQueue(messages, demo, null, now);
-    if (first) openMessage(first.id);
-    else setToast("Nothing waiting: every guest has a reply.");
   }
 
   function approveProposals(m: Message, picked: Proposal[]) {
@@ -266,7 +256,6 @@ export default function App() {
     setChat([]);
     setThreads({});
     setOpenId(null);
-    setShift(false);
     setToast(null);
     briefed.current = false;
   }
@@ -314,9 +303,6 @@ export default function App() {
           </span>
         </div>
         <div className="shiftbar-actions">
-          <button type="button" className="btn" onClick={startShift} disabled={!messages.length}>
-            Start shift
-          </button>
           <button
             type="button"
             className="btn btn-secondary phone-only"
@@ -450,10 +436,8 @@ export default function App() {
               thread={threadFor(threads, open, demo)}
               busy={wsBusy}
               aiLabel={aiLabel}
-              shift={shift ? { left: stats.waiting } : null}
               onClose={() => {
                 setOpenId(null);
-                setShift(false);
               }}
               onNext={next ? goNext : null}
               onAgree={() => setThreads((t) => agreePlan(t, open, demo))}
